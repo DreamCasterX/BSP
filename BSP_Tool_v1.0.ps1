@@ -1,13 +1,15 @@
 
 $_creator = "Mike Lu"
 $_version = 1.0
-$_changedate = 7/15/2025
+$_changedate = 7/16/2025
 
 
 # User-defined settings
 $product = "glymur-wp-1-0_amss_standard_oem"
 $BSP_driver = "regrouped_driver_ATT_Signed"    
 $thumbdrive = "USB_Installer"
+$new_driver = "IEC_driver"
+$iso_folder = "ISO"
 $remove_driver = @(
     "qcSensorsConfig8480",
     "Qccamtelesensor8480",
@@ -32,13 +34,14 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Write-Host "=========================="
 Write-Host "1) Download BSP package"
 Write-Host "2) Create USB installer"
-Write-Host "3) Update drivers" 
-Write-Host "4) Copy thumbdrive to USB" 
+Write-Host "3) Update drivers"
+Write-Host "4) Display driver info"    
+Write-Host "5) Copy thumbdrive to USB" 
 Write-Host "=========================="
 
 do {
     $mainSelection = Read-Host "Select a function"
-} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4')
+} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5')
 
 switch ($mainSelection) {
     '1' {
@@ -96,7 +99,7 @@ switch ($mainSelection) {
         # Create USB installer
         $currentScript = $MyInvocation.MyCommand.Name
         # Ignore folders: WP/$thumbdrive/regrouped_driver
-        $folders = Get-ChildItem -Directory | Where-Object { $_.Name -ne $currentScript -and $_.Name -ne 'WP' -and $_.Name -ne $thumbdrive -and $_.Name -ne 'IEC_driver' -and $_.Name -ne 'ISO' -and $_.Name -ne 'USB_Installer' }
+        $folders = Get-ChildItem -Directory | Where-Object { $_.Name -ne $currentScript -and $_.Name -ne 'WP' -and $_.Name -ne $thumbdrive -and $_.Name -ne $new_driver -and $_.Name -ne $iso_folder -and $_.Name -ne 'USB_Installer' -and $_.Name -ne 'IEC_driver' -and $_.Name -ne 'ISO' }
         if ($folders.Count -eq 0) {
             Write-Host "No folders found" -ForegroundColor Yellow
             Write-Host ""
@@ -257,7 +260,7 @@ switch ($mainSelection) {
 
         # Copy OS ISO folders (boot/efi/sources/support)
         Write-Host "Copying OS ISO folders to Thumbdrive..." -ForegroundColor Cyan
-        $isoDir = Join-Path $PWD 'ISO'
+        $isoDir = Join-Path $PWD $iso_folder
         $isoFiles = Get-ChildItem -Path $isoDir -Filter *.iso
         if ($isoFiles.Count -eq 0) {
             Write-Host "No ISO files found in ISO directory. Please put the OS ISO file in the ISO folder." -ForegroundColor Red
@@ -364,7 +367,7 @@ switch ($mainSelection) {
         # Copy IEC customized drivers
         Write-Host "Copying IEC customized drivers..." -ForegroundColor Cyan
 
-        $iecDriverFolder = Join-Path $PWD 'IEC_driver'
+        $iecDriverFolder = Join-Path $PWD $new_driver
         if (!(Test-Path $iecDriverFolder)) {
             Write-Host "IEC driver folder not found" -ForegroundColor Red
             Write-Host ""
@@ -763,7 +766,7 @@ switch ($mainSelection) {
         }
         $numFolder = $numFolders[0].Name
         $dstBspDriver = Join-Path $prebuiltDir "$numFolder\regrouped_driver"
-        $iecDriverFolder = Join-Path $PWD 'IEC_driver'
+        $iecDriverFolder = Join-Path $PWD $new_driver
         if (!(Test-Path $iecDriverFolder)) {
             Write-Host "IEC driver folder not found" -ForegroundColor Red
             Write-Host ""
@@ -934,6 +937,115 @@ switch ($mainSelection) {
         }
     }
     '4' {
+        # Display driver info (GFX/Sensor/Camera/Audio/aDSP/QcTreeExtOem)
+        Write-Host ""
+        Write-Host "Check driver versions..." -ForegroundColor Cyan
+        # Check if $new_driver folder exists
+        $driverDir = Join-Path $PWD $new_driver
+        if (!(Test-Path $driverDir)) {
+            Write-Host "No driver folder found!" -ForegroundColor Red
+            return
+        }
+        # Check if $new_driver is not empty
+        $driverItems = Get-ChildItem -Path $driverDir
+        if ($driverItems.Count -eq 0) {
+            Write-Host "No driver found in $new_driver!" -ForegroundColor Red
+            return
+        }
+        # Check INF files
+        # Auto detect product id
+        $subFolders = Get-ChildItem -Path $driverDir -Directory
+        $product_id = $null
+        foreach ($folder in $subFolders) {
+            if ($folder.Name -match '\d{4,}') {
+                $product_id = $matches[0]
+                break
+            }
+        }
+        if (-not $product_id) {
+            Write-Host "Cannot detect product id from driver folder!" -ForegroundColor Red
+            return
+        }
+        $driverList = @(
+            @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "UMA Video Driver" },
+            @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig Driver" },
+            @{ path = "qccamauxsensor$product_id/qccamauxsensor$product_id.inf"; label = "Camera Device (auxsensor)" },
+            @{ path = "qccamavs$product_id/qccamavs$product_id.inf"; label = "Camera Device (avs)" },
+            @{ path = "qccamfrontsensor$product_id/qccamfrontsensor$product_id.inf"; label = "Camera Device (frontsensor)" },
+            @{ path = "qccamplatform$product_id/qccamplatform$product_id.inf"; label = "Camera Device (platform)" },
+            @{ path = "qcaxu$product_id/qcaxu$product_id.inf"; label = "Audio Driver" },
+            @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP Driver" },
+            @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" }
+        )
+        foreach ($drv in $driverList) {
+            $infPath = Join-Path $driverDir $drv.path
+            $label = $drv.label
+            $ver = "N/A"
+            if (Test-Path $infPath) {
+                try {
+                    $lines = Get-Content $infPath -Encoding Default
+                    foreach ($line in $lines) {
+                        if ($line -match '^\s*DriverVer\s*=\s*(.+)$') {
+                            $ver = $matches[1].Trim()
+                            break
+                        }
+                    }
+                } catch {
+                    $ver = "N/A"
+                }
+            }
+            if ($ver -ne "N/A") {
+                Write-Host -NoNewline ("  {0}: " -f $label)
+                Write-Host $ver -ForegroundColor Blue
+            } else {
+                Write-Host -NoNewline ("  {0}: " -f $label)
+                Write-Host "N/A" -ForegroundColor Red
+            }
+        }
+        Write-Host "Completed!" -ForegroundColor Green
+
+        # Display check driver signing...
+        Write-Host ""
+        Write-Host "Check driver signing..." -ForegroundColor Cyan
+        foreach ($drv in $driverList) {
+            $catPath = (Join-Path $driverDir $drv.path) -replace '\.inf$', '.cat'
+            $label = $drv.label
+            $signResult = "N/A"
+            if (Test-Path $catPath) {
+                try {
+                    # Get driver signature
+                    $sigInfo = Get-AuthenticodeSignature $catPath
+                    if ($sigInfo -and $sigInfo.SignerCertificate) {
+                        $signer = $sigInfo.SignerCertificate.Subject
+                        if ($signer -match 'CN=Microsoft Windows Hardware Compatibility Publisher') {
+                            $signResult = "Test-signed"
+                        } elseif ($signer -match 'CN=Qualcomm OEM Test Cert 2021 \(TEST ONLY\)') {
+                            $signResult = "Unsigned"
+                        } else {
+                            $signResult = $sigInfo.SignerCertificate.Subject
+                        }
+                    } else {
+                        $signResult = "N/A"
+                    }
+                } catch {
+                    $signResult = "N/A"
+                }
+            }
+            if ($signResult -eq "Test-signed") {
+                Write-Host -NoNewline ("  {0}: " -f $label)
+                Write-Host $signResult -ForegroundColor Blue
+            } elseif ($signResult -eq "Unsigned") {
+                Write-Host -NoNewline ("  {0}: " -f $label)
+                Write-Host $signResult -ForegroundColor Yellow
+            } else {
+                Write-Host -NoNewline ("  {0}: " -f $label)
+                Write-Host "N/A" -ForegroundColor Red
+            }
+        }
+        Write-Host "Completed!" -ForegroundColor Green
+        Write-Host ""
+    }
+    '5' {
         # Copy thumbdrive to USB
         Write-Host ""
         Write-Host "Copying Thumbdrive to FAT32 USB ..." -ForegroundColor Cyan
