@@ -1,7 +1,7 @@
 
 $_creator = "Mike Lu"
 $_version = 1.0
-$_changedate = 7/16/2025
+$_changedate = 7/21/2025
 
 
 # User-defined settings
@@ -20,7 +20,9 @@ $remove_driver = @(
     "qccamrearsensor8480",
     "qcAlwaysOnSensing"
 )
-
+$add_driver = @(
+    "qccamflash_ext8480"
+)
 
 # Check if run as admin
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -448,46 +450,54 @@ switch ($mainSelection) {
                             Write-Host "Failed to replace folder: $name" -ForegroundColor Red
                         }
                     }
+                    Write-Host "Completed!" -ForegroundColor Green
+                } else {
+                    Write-Host "Skip replacing base drivers" -ForegroundColor Yellow
                 }
+            } else {
+                Write-Host "No same name folders to replace."
             }
-            Write-Host "Completed!" -ForegroundColor Green
             Write-Host ""
         }
         
-        # Remove unwanted driver from DesktopScripts\drivers
+        # Modify pre-loaded driver in DesktopScripts\drivers
         Write-Host ""
-        Write-Host "Removing unwanted drivers...." -ForegroundColor Cyan
+        Write-Host "Modifying preloaded drivers...." -ForegroundColor Cyan
         $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
         $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
         if (Test-Path $driversTxtPath) {
-            Write-Host "Unwanted driver list:"
+            Write-Host "Add list:"
+            $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+            Write-Host "Remove list:"
             $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
             do {
-                $removeAns = Read-Host "Remove the above drivers from drivers.txt? (y/n)"
+                $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
                 $removeAnsLow = $removeAns.ToLower()
             } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
             if ($removeAnsLow -eq 'y') {
                 try {
-                    $driversContent = Get-Content $driversTxtPath -Raw -Encoding Default
-                    $driversLines = $driversContent -split "`r?`n"
-                    $removeList = $remove_driver
-                    $filteredLines = $driversLines | Where-Object { $line = $_.Trim(); ($line -ne '' -and -not ($removeList -contains $line)) -or ($line -eq '' -and $true) }
-                    # Delete empty line
-                    $finalLines = @()
-                    foreach ($line in $filteredLines) {
-                        if ($line -ne '' -or ($finalLines.Count -gt 0 -and $finalLines[-1] -ne '')) {
-                            $finalLines += $line
+                    $driversLines = Get-Content $driversTxtPath -Encoding Default
+                    $newLines = @()
+                    foreach ($line in $driversLines) {
+                        $trimmedLine = $line.Trim()
+                        if ($remove_driver -contains $trimmedLine) {
+                            continue # Skip this line
+                        }
+                        $newLines += $line # Add the current line
+                        if ($trimmedLine -eq "qccamflash8480") {
+                            $newLines += $add_driver # Add new drivers after the anchor
                         }
                     }
-                    Set-Content -Path $driversTxtPath -Value ($finalLines -join "`r`n") -Encoding Default
+                    Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
                     Write-Host "Completed!" -ForegroundColor Green
                 } catch {
-                    Write-Host "Failed to remove drivers: $_" -ForegroundColor Red
+                    Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
                 }
             } else {
-                Write-Host "Skip removing driver" -ForegroundColor Yellow
+                Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
             }
         }
+
 
         # Mount winpe.wim 
         Write-Host "Mounting WinPE...." -ForegroundColor Cyan
@@ -835,53 +845,54 @@ switch ($mainSelection) {
                             Write-Host "Failed to replace folder: $name" -ForegroundColor Red
                         }
                     }
-                } elseif ($replace -eq 'n' -or $replace -eq 'N') {
+                    Write-Host "Completed!" -ForegroundColor Green
+                } else {
                     Write-Host "Skip replacing base drivers" -ForegroundColor Yellow
-                    Write-Host ""
-                    Read-Host "Press Enter to exit..."
-                    return
                 }
+            } else {
+                Write-Host "No same name folders to replace."
             }
-            Write-Host "Completed!" -ForegroundColor Green
             Write-Host ""
         }
 
-        # Remove unwanted driver from DesktopScripts\drivers
+        # Modify pre-loaded driver in DesktopScripts\drivers
         $dstPrebuilt = Join-Path $prebuiltDir $numFolder
         Write-Host ""
-        Write-Host "Removing unwanted drivers...." -ForegroundColor Cyan
+        Write-Host "Modifying preloaded drivers...." -ForegroundColor Cyan
         $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
         $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
         if (Test-Path $driversTxtPath) {
-            Write-Host "Unwanted driver list:"
+            Write-Host "Add list:" 
+            $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+            Write-Host "Remove list:"
             $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
             do {
-                $removeAns = Read-Host "Remove the above drivers from drivers.txt? (y/n)"
+                $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
                 $removeAnsLow = $removeAns.ToLower()
             } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
             if ($removeAnsLow -eq 'y') {
                 try {
-                    $driversContent = Get-Content $driversTxtPath -Raw -Encoding Default
-                    $driversLines = $driversContent -split "`r?`n"
-                    $removeList = $remove_driver
-                    $filteredLines = $driversLines | Where-Object { $line = $_.Trim(); ($line -ne '' -and -not ($removeList -contains $line)) -or ($line -eq '' -and $true) }
-                    # Delete empty line
-                    $finalLines = @()
-                    foreach ($line in $filteredLines) {
-                        if ($line -ne '' -or ($finalLines.Count -gt 0 -and $finalLines[-1] -ne '')) {
-                            $finalLines += $line
+                    $driversLines = Get-Content $driversTxtPath -Encoding Default
+                    $newLines = @()
+                    foreach ($line in $driversLines) {
+                        $trimmedLine = $line.Trim()
+                        if ($remove_driver -contains $trimmedLine) {
+                            continue # Skip this line
+                        }
+                        $newLines += $line # Add the current line
+                        if ($trimmedLine -eq "qccamflash8480") {
+                            $newLines += $add_driver # Add new drivers after the anchor
                         }
                     }
-                    Set-Content -Path $driversTxtPath -Value ($finalLines -join "`r`n") -Encoding Default
+                    Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
                     Write-Host "Completed!" -ForegroundColor Green
                 } catch {
-                    Write-Host "Failed to remove drivers: $_" -ForegroundColor Red
+                    Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
                 }
             } else {
-                Write-Host "Skip removing driver" -ForegroundColor Yellow
+                Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
             }
         }
-
 
         # Set environment variables
         Write-Host ""
@@ -967,14 +978,14 @@ switch ($mainSelection) {
             return
         }
         $driverList = @(
-            @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "UMA Video Driver" },
-            @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig Driver" },
-            @{ path = "qccamauxsensor$product_id/qccamauxsensor$product_id.inf"; label = "Camera Device (auxsensor)" },
-            @{ path = "qccamavs$product_id/qccamavs$product_id.inf"; label = "Camera Device (avs)" },
-            @{ path = "qccamfrontsensor$product_id/qccamfrontsensor$product_id.inf"; label = "Camera Device (frontsensor)" },
-            @{ path = "qccamplatform$product_id/qccamplatform$product_id.inf"; label = "Camera Device (platform)" },
-            @{ path = "qcaxu$product_id/qcaxu$product_id.inf"; label = "Audio Driver" },
-            @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP Driver" },
+            @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "GFX" },
+            @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
+            @{ path = "qccamauxsensor$product_id/qccamauxsensor$product_id.inf"; label = "Camera (auxsensor)" },
+            @{ path = "qccamavs$product_id/qccamavs$product_id.inf"; label = "Camera (avs)" },
+            @{ path = "qccamfrontsensor$product_id/qccamfrontsensor$product_id.inf"; label = "Camera (frontsensor)" },
+            @{ path = "qccamplatform$product_id/qccamplatform$product_id.inf"; label = "Camera (platform)" },
+            @{ path = "qcaxu$product_id/qcaxu$product_id.inf"; label = "Audio" },
+            @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
             @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" }
         )
         foreach ($drv in $driverList) {
