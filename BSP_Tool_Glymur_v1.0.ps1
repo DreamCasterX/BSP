@@ -1,27 +1,29 @@
 
 $_creator = "Mike Lu"
 $_version = 1.0
-$_changedate = 7/21/2025
+$_changedate = 7/22/2025
+
+$product = "glymur-wp-1-0_amss_standard_oem"
+$product_id = "8480"
 
 
 # User-defined settings
-$product = "glymur-wp-1-0_amss_standard_oem"
 $BSP_driver = "regrouped_driver_ATT_Signed"    
 $thumbdrive = "USB_Installer"
 $new_driver = "IEC_driver"
 $iso_folder = "ISO"
 $remove_driver = @(
-    "qcSensorsConfig8480",
-    "Qccamtelesensor8480",
-    "Qccamultrawidesensor8480",
-    "qccamultrawidesensor_extension8480",
-    "qccamtelesensor_extension8480",
-    "qccamrearsensor_extension8480",
-    "qccamrearsensor8480",
+    "qcSensorsConfig$product_id",
+    "Qccamtelesensor$product_id",
+    "Qccamultrawidesensor$product_id",
+    "qccamultrawidesensor_extension$product_id",
+    "qccamtelesensor_extension$product_id",
+    "qccamrearsensor_extension$product_id",
+    "qccamrearsensor$product_id",
     "qcAlwaysOnSensing"
 )
 $add_driver = @(
-    "qccamflash_ext8480"
+    "qccamflash_ext$product_id"
 )
 
 # Check if run as admin
@@ -131,23 +133,16 @@ switch ($mainSelection) {
         # Copy required BSP package files (Thumbdrive/Firmware/DesktopScripts/regrouped_driver)
         Write-Host "Copying BSP source package to Thumbdrive..." -ForegroundColor Cyan
         $prebuiltPath = Join-Path $srcRoot 'WP/prebuilt'
-        $numFolders = Get-ChildItem -Path $prebuiltPath -Directory | Where-Object { $_.Name -match '^[0-9]+$' }
-        if ($numFolders.Count -eq 0) {
-            Write-Host "No number folder under WP/prebuilt/" -ForegroundColor Red
-            Write-Host ""
-            Read-Host "Press Enter to exit..."
-            return
-        }
-        $numFolder = $numFolders[0]
-        $srcThumbdrive = Join-Path $numFolder.FullName 'ISOGEN_QCReference/Thumbdrive'
+        $numFolder = $product_id
+        $srcThumbdrive = Join-Path (Join-Path $prebuiltPath $numFolder) 'ISOGEN_QCReference/Thumbdrive'
         if (!(Test-Path $srcThumbdrive)) {
             Write-Host "Source package not found: $srcThumbdrive" -ForegroundColor Red
             Write-Host ""
             Read-Host "Press Enter to exit..."
             return
         }
-        $dstFolder = Join-Path -Path (Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder.Name) 'ISOGEN/emmcdl_method'
-        $dstPrebuilt = Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder.Name
+        $dstFolder = Join-Path -Path (Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder) 'ISOGEN/emmcdl_method'
+        $dstPrebuilt = Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder
         if (Test-Path $dstFolder) {
             do {
                 $overwrite = Read-Host "WP folder already exists, overwrite? (y/n)"
@@ -162,21 +157,21 @@ switch ($mainSelection) {
                 Write-Host "Completed!" -ForegroundColor Green
                 Write-Host ""
                 # Copy DesktopScripts
-                $srcDesktopScripts = Join-Path $numFolder.FullName 'DesktopScripts'
+                $srcDesktopScripts = Join-Path (Join-Path $prebuiltPath $numFolder) 'DesktopScripts'
                 $dstDesktopScripts = Join-Path $dstPrebuilt 'DesktopScripts'
                 if (Test-Path $srcDesktopScripts) {
                     if (Test-Path $dstDesktopScripts) { Remove-Item -Path $dstDesktopScripts -Recurse -Force }
                     Copy-Item -Path $srcDesktopScripts -Destination $dstPrebuilt -Recurse -Force
                 }
                 # Copy firmware
-                $srcFirmware = Join-Path $numFolder.FullName 'firmware'
+                $srcFirmware = Join-Path (Join-Path $prebuiltPath $numFolder) 'firmware'
                 $dstFirmware = Join-Path $dstPrebuilt 'firmware'
                 if (Test-Path $srcFirmware) {
                     if (Test-Path $dstFirmware) { Remove-Item -Path $dstFirmware -Recurse -Force }
                     Copy-Item -Path $srcFirmware -Destination $dstPrebuilt -Recurse -Force
                 }
                 # Copy $BSP_driver
-                $srcDriver = Join-Path $numFolder.FullName $BSP_driver
+                $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
                 if (Test-Path $srcDriver) {
                     $dstDriver = Join-Path $dstPrebuilt 'regrouped_driver'
                     if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
@@ -196,21 +191,21 @@ switch ($mainSelection) {
             Write-Host "Completed!" -ForegroundColor Green
             Write-Host ""
             # Copy DesktopScripts
-            $srcDesktopScripts = Join-Path $numFolder.FullName 'DesktopScripts'
+            $srcDesktopScripts = Join-Path (Join-Path $prebuiltPath $numFolder) 'DesktopScripts'
             $dstDesktopScripts = Join-Path $dstPrebuilt 'DesktopScripts'
             if (Test-Path $srcDesktopScripts) {
                 if (Test-Path $dstDesktopScripts) { Remove-Item -Path $dstDesktopScripts -Recurse -Force }
                 Copy-Item -Path $srcDesktopScripts -Destination $dstPrebuilt -Recurse -Force
             }
             # Copy firmware
-            $srcFirmware = Join-Path $numFolder.FullName 'firmware'
+            $srcFirmware = Join-Path (Join-Path $prebuiltPath $numFolder) 'firmware'
             $dstFirmware = Join-Path $dstPrebuilt 'firmware'
             if (Test-Path $srcFirmware) {
                 if (Test-Path $dstFirmware) { Remove-Item -Path $dstFirmware -Recurse -Force }
                 Copy-Item -Path $srcFirmware -Destination $dstPrebuilt -Recurse -Force
             }
             # Copy $BSP_driver
-            $srcDriver = Join-Path $numFolder.FullName $BSP_driver
+            $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
             if (Test-Path $srcDriver) {
                 $dstDriver = Join-Path $dstPrebuilt 'regrouped_driver'
                 if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
@@ -640,7 +635,7 @@ switch ($mainSelection) {
             # Set environment variables
             Write-Host ""
             Write-Host "Setting environment variable..." -ForegroundColor Cyan
-            $qcplatform = $numFolder.Name
+            $qcplatform = $numFolder
             $BSPRoot = (Resolve-Path $thumbdrive).Path
             $THUMBDRIVE = Join-Path $BSPRoot "WP\prebuilt\$qcplatform\ISOGEN\emmcdl_method\Thumbdrive"
             $env:qcplatform = $qcplatform
@@ -769,12 +764,7 @@ switch ($mainSelection) {
         }
         # Get prebuilt\(number folder name)
         $prebuiltDir = Join-Path $toUsbFolder 'WP\prebuilt'
-        $numFolders = Get-ChildItem -Path $prebuiltDir -Directory | Where-Object { $_.Name -match '^\d+$' }
-        if ($numFolders.Count -eq 0) {
-            Write-Host "No number folder under WP/prebuilt/" -ForegroundColor Red
-            return
-        }
-        $numFolder = $numFolders[0].Name
+        $numFolder = $product_id
         $dstBspDriver = Join-Path $prebuiltDir "$numFolder\regrouped_driver"
         $iecDriverFolder = Join-Path $PWD $new_driver
         if (!(Test-Path $iecDriverFolder)) {
@@ -978,7 +968,7 @@ switch ($mainSelection) {
             return
         }
         $driverList = @(
-            @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "GFX" },
+            @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
             @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
             @{ path = "qccamauxsensor$product_id/qccamauxsensor$product_id.inf"; label = "Camera (auxsensor)" },
             @{ path = "qccamavs$product_id/qccamavs$product_id.inf"; label = "Camera (avs)" },
@@ -1062,14 +1052,7 @@ switch ($mainSelection) {
         Write-Host "Copying Thumbdrive to FAT32 USB ..." -ForegroundColor Cyan
         # Find $thumbdrive/WP/prebuilt/{number}/ISOGEN/emmcdl_method/Thumbdrive
         $prebuiltPath = Join-Path $PWD "$thumbdrive/WP/prebuilt"
-        $numFolders = Get-ChildItem -Path $prebuiltPath -Directory | Where-Object { $_.Name -match '^[0-9]+$' }
-        if ($numFolders.Count -eq 0) {
-            Write-Host "No number folder under WP/prebuilt/" -ForegroundColor Red
-            Write-Host ""
-            Read-Host "Press Enter to exit..."
-            return
-        }
-        $numFolder = $numFolders[0].Name
+        $numFolder = $product_id
         $thumbdriveDst = Join-Path $prebuiltPath "$numFolder/ISOGEN/emmcdl_method/Thumbdrive"
         if (!(Test-Path $thumbdriveDst) -or ($null -eq (Get-ChildItem -Path $thumbdriveDst))) {
             Write-Host "Thumbdrive does not exist or is empty" -ForegroundColor Red
