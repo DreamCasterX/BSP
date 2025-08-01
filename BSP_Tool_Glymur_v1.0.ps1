@@ -1,7 +1,7 @@
 
 $_creator = "Mike Lu"
 $_version = 1.0
-$_changedate = 7/22/2025
+$_changedate = 7/31/2025
 
 $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
@@ -9,8 +9,8 @@ $product_id = "8480"
 
 # User-defined settings
 $BSP_driver = "regrouped_driver_ATT_Signed"    
-$thumbdrive = "USB_Installer"
-$new_driver = "IEC_driver"
+$thumbdrive = "2500_BSP_27863_OSADK_all_drivers_qcscm8480_0731"
+$new_driver = "Updated_driver"
 $iso_folder = "ISO"
 $remove_driver = @(
     "qcSensorsConfig$product_id",
@@ -509,6 +509,7 @@ switch ($mainSelection) {
             $mountDir = 'C:\Mount'
             if (Test-Path $mountDir) {
                 try {
+					dism /unmount-wim /mountdir:$mountDir /discard
                     Remove-Item -Path $mountDir -Recurse -Force
                 } catch {
                     Write-Host "Failed to remove C:\Mount. Please close any open files or folders in C:\Mount and try again." -ForegroundColor Red
@@ -538,6 +539,12 @@ switch ($mainSelection) {
                 'WinPE-PowerShell.cab', 'en-us\WinPE-PowerShell_en-us.cab',
                 'WinPE-StorageWMI.cab', 'en-us\WinPE-StorageWMI_en-us.cab',
                 'WinPE-DismCmdlets.cab', 'en-us\WinPE-DismCmdlets_en-us.cab'
+				'WinPE-x64-Support.cab', 'en-us\WinPE-x64-Support_en-us.cab',  # 0731 added
+				'WinPE-Dot3Svc.cab', 'en-us\WinPE-Dot3Svc_en-us.cab', # 0731 added
+				'WinPE-MDAC.cab', 'en-us\WinPE-MDAC_en-us.cab', # 0731 added
+				'WinPE-WDS-Tools.cab', 'en-us\WinPE-WDS-Tools_en-us.cab', # 0731 added
+				'WinPE-SecureStartup.cab', 'en-us\WinPE-SecureStartup_en-us.cab' # 0731 added
+				'WinPE-SecureBootCmdlets.cab', 'WinPE-PlatformId.cab' # 0731 added
             )
             $baseCabPath = 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\arm64\WinPE_OCs'
             $success = $true
