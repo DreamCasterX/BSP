@@ -1,15 +1,17 @@
 
-$_creator = "Mike Lu"
-$_version = 1.0
-$_changedate = 7/31/2025
-
-$product = "glymur-wp-1-0_amss_standard_oem"
-$product_id = "8480"
+$_creator = "Mike Lu (lu.mike@inventec.com)"
+$_version = 1.1
+$_changedate = 8/12/2025
 
 
 # User-defined settings
+$thumbdrive = "2900_BSP_27871_OSADK_inbox"
+
+
+# Fixed settings
 $BSP_driver = "regrouped_driver_ATT_Signed"    
-$thumbdrive = "2500_BSP_27863_OSADK_all_drivers_qcscm8480_0731"
+$product = "glymur-wp-1-0_amss_standard_oem"
+$product_id = "8480"
 $new_driver = "Updated_driver"
 $iso_folder = "ISO"
 $remove_driver = @(
@@ -23,7 +25,22 @@ $remove_driver = @(
     "qcAlwaysOnSensing"
 )
 $add_driver = @(
-    "qccamflash_ext$product_id"
+    "qccamflash_ext$product_id"  # Added to the later of qccamflash$product_id
+)
+$driverCheckList = @(
+    @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
+    @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
+    @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" },
+    @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" },
+    @{ path = "qccamisp_ext$product_id/qccamisp_ext$product_id.inf"; label = "Camera (ISP)" },
+    @{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio" },
+    @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
+    @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" },
+	@{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "qcscm" },
+	@{ path = "qcbluetooth$product_id/qcbluetooth$product_id.inf"; label = "BT" },
+	@{ path = "qci2c$product_id/qci2c$product_id.inf"; label = "I2C bus" },
+	@{ path = "qcspi$product_id/qcspi$product_id.inf"; label = "SPI bus" },
+	@{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU" }
 )
 
 # Check if run as admin
@@ -461,35 +478,51 @@ switch ($mainSelection) {
         $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
         $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
         if (Test-Path $driversTxtPath) {
-            Write-Host "Add list:"
-            $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-            Write-Host "Remove list:"
-            $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-            do {
-                $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
-                $removeAnsLow = $removeAns.ToLower()
-            } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
-            if ($removeAnsLow -eq 'y') {
-                try {
-                    $driversLines = Get-Content $driversTxtPath -Encoding Default
-                    $newLines = @()
-                    foreach ($line in $driversLines) {
-                        $trimmedLine = $line.Trim()
-                        if ($remove_driver -contains $trimmedLine) {
-                            continue # Skip this line
-                        }
-                        $newLines += $line # Add the current line
-                        if ($trimmedLine -eq "qccamflash8480") {
-                            $newLines += $add_driver # Add new drivers after the anchor
-                        }
-                    }
-                    Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
-                    Write-Host "Completed!" -ForegroundColor Green
-                } catch {
-                    Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
-                }
+            # Check if there are any drivers to add or remove
+            $hasAddDrivers = $add_driver.Count -gt 0
+            $hasRemoveDrivers = $remove_driver.Count -gt 0
+            
+            if (-not $hasAddDrivers -and -not $hasRemoveDrivers) {
+                Write-Host "No drivers to add or remove. Skipping driver modification." -ForegroundColor Yellow
             } else {
-                Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
+                Write-Host "Add list:"
+                if ($hasAddDrivers) {
+                    $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+                } else {
+                    Write-Host "  N/A" -ForegroundColor Gray
+                }
+                Write-Host "Remove list:"
+                if ($hasRemoveDrivers) {
+                    $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+                } else {
+                    Write-Host "  N/A" -ForegroundColor Gray
+                }
+                do {
+                    $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
+                    $removeAnsLow = $removeAns.ToLower()
+                } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
+                if ($removeAnsLow -eq 'y') {
+                    try {
+                        $driversLines = Get-Content $driversTxtPath -Encoding Default
+                        $newLines = @()
+                        foreach ($line in $driversLines) {
+                            $trimmedLine = $line.Trim()
+                            if ($hasRemoveDrivers -and $remove_driver -contains $trimmedLine) {
+                                continue # Skip this line
+                            }
+                            $newLines += $line # Add the current line
+                            if ($trimmedLine -eq "qccamflash$product_id" -and $hasAddDrivers) {
+                                $newLines += $add_driver # Add new drivers after the anchor
+                            }
+                        }
+                        Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
+                        Write-Host "Completed!" -ForegroundColor Green
+                    } catch {
+                        Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
+                    }
+                } else {
+                    Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
+                }
             }
         }
 
@@ -539,12 +572,12 @@ switch ($mainSelection) {
                 'WinPE-PowerShell.cab', 'en-us\WinPE-PowerShell_en-us.cab',
                 'WinPE-StorageWMI.cab', 'en-us\WinPE-StorageWMI_en-us.cab',
                 'WinPE-DismCmdlets.cab', 'en-us\WinPE-DismCmdlets_en-us.cab'
-				'WinPE-x64-Support.cab', 'en-us\WinPE-x64-Support_en-us.cab',  # 0731 added
-				'WinPE-Dot3Svc.cab', 'en-us\WinPE-Dot3Svc_en-us.cab', # 0731 added
-				'WinPE-MDAC.cab', 'en-us\WinPE-MDAC_en-us.cab', # 0731 added
-				'WinPE-WDS-Tools.cab', 'en-us\WinPE-WDS-Tools_en-us.cab', # 0731 added
-				'WinPE-SecureStartup.cab', 'en-us\WinPE-SecureStartup_en-us.cab' # 0731 added
-				'WinPE-SecureBootCmdlets.cab', 'WinPE-PlatformId.cab' # 0731 added
+				'WinPE-x64-Support.cab', 'en-us\WinPE-x64-Support_en-us.cab',  # 0731 added for WinPE BCU func
+				'WinPE-Dot3Svc.cab', 'en-us\WinPE-Dot3Svc_en-us.cab', # 0731 added for WinPE BCU func
+				'WinPE-MDAC.cab', 'en-us\WinPE-MDAC_en-us.cab', # 0731 added for WinPE BCU func
+				'WinPE-WDS-Tools.cab', 'en-us\WinPE-WDS-Tools_en-us.cab', # 0731 added for WinPE BCU func
+				'WinPE-SecureStartup.cab', 'en-us\WinPE-SecureStartup_en-us.cab' # 0731 added for WinPE BCU func
+				'WinPE-SecureBootCmdlets.cab', 'WinPE-PlatformId.cab' # 0731 added for WinPE BCU func
             )
             $baseCabPath = 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\arm64\WinPE_OCs'
             $success = $true
@@ -859,35 +892,51 @@ switch ($mainSelection) {
         $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
         $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
         if (Test-Path $driversTxtPath) {
-            Write-Host "Add list:" 
-            $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-            Write-Host "Remove list:"
-            $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-            do {
-                $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
-                $removeAnsLow = $removeAns.ToLower()
-            } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
-            if ($removeAnsLow -eq 'y') {
-                try {
-                    $driversLines = Get-Content $driversTxtPath -Encoding Default
-                    $newLines = @()
-                    foreach ($line in $driversLines) {
-                        $trimmedLine = $line.Trim()
-                        if ($remove_driver -contains $trimmedLine) {
-                            continue # Skip this line
-                        }
-                        $newLines += $line # Add the current line
-                        if ($trimmedLine -eq "qccamflash8480") {
-                            $newLines += $add_driver # Add new drivers after the anchor
-                        }
-                    }
-                    Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
-                    Write-Host "Completed!" -ForegroundColor Green
-                } catch {
-                    Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
-                }
+            # Check if there are any drivers to add or remove
+            $hasAddDrivers = $add_driver.Count -gt 0
+            $hasRemoveDrivers = $remove_driver.Count -gt 0
+            
+            if (-not $hasAddDrivers -and -not $hasRemoveDrivers) {
+                Write-Host "No drivers to add or remove. Skipping driver modification." -ForegroundColor Yellow
             } else {
-                Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
+                Write-Host "Add list:" 
+                if ($hasAddDrivers) {
+                    $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+                } else {
+                    Write-Host "  N/A" -ForegroundColor Gray
+                }
+                Write-Host "Remove list:"
+                if ($hasRemoveDrivers) {
+                    $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+                } else {
+                    Write-Host "  N/A" -ForegroundColor Gray
+                }
+                do {
+                    $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
+                    $removeAnsLow = $removeAns.ToLower()
+                } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
+                if ($removeAnsLow -eq 'y') {
+                    try {
+                        $driversLines = Get-Content $driversTxtPath -Encoding Default
+                        $newLines = @()
+                        foreach ($line in $driversLines) {
+                            $trimmedLine = $line.Trim()
+                            if ($hasRemoveDrivers -and $remove_driver -contains $trimmedLine) {
+                                continue # Skip this line
+                            }
+                            $newLines += $line # Add the current line
+                            if ($trimmedLine -eq "qccamflash$product_id" -and $hasAddDrivers) {
+                                $newLines += $add_driver # Add new drivers after the anchor
+                            }
+                        }
+                        Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
+                        Write-Host "Completed!" -ForegroundColor Green
+                    } catch {
+                        Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
+                    }
+                } else {
+                    Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
+                }
             }
         }
 
@@ -945,7 +994,7 @@ switch ($mainSelection) {
         }
     }
     '4' {
-        # Display driver info (GFX/Sensor/Camera/Audio/aDSP/QcTreeExtOem)
+        # Display driver info
         Write-Host ""
         Write-Host "Check driver versions..." -ForegroundColor Cyan
         # Check if $new_driver folder exists
@@ -974,18 +1023,8 @@ switch ($mainSelection) {
             Write-Host "Cannot detect product id from driver folder!" -ForegroundColor Red
             return
         }
-        $driverList = @(
-            @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
-            @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
-            @{ path = "qccamauxsensor$product_id/qccamauxsensor$product_id.inf"; label = "Camera (auxsensor)" },
-            @{ path = "qccamavs$product_id/qccamavs$product_id.inf"; label = "Camera (avs)" },
-            @{ path = "qccamfrontsensor$product_id/qccamfrontsensor$product_id.inf"; label = "Camera (frontsensor)" },
-            @{ path = "qccamplatform$product_id/qccamplatform$product_id.inf"; label = "Camera (platform)" },
-            @{ path = "qcaxu$product_id/qcaxu$product_id.inf"; label = "Audio" },
-            @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
-            @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" }
-        )
-        foreach ($drv in $driverList) {
+
+        foreach ($drv in $driverCheckList) {
             $infPath = Join-Path $driverDir $drv.path
             $label = $drv.label
             $ver = "N/A"
@@ -1015,7 +1054,7 @@ switch ($mainSelection) {
         # Display check driver signing...
         Write-Host ""
         Write-Host "Check driver signing..." -ForegroundColor Cyan
-        foreach ($drv in $driverList) {
+        foreach ($drv in $driverCheckList) {
             $catPath = (Join-Path $driverDir $drv.path) -replace '\.inf$', '.cat'
             $label = $drv.label
             $signResult = "N/A"
@@ -1026,7 +1065,7 @@ switch ($mainSelection) {
                     if ($sigInfo -and $sigInfo.SignerCertificate) {
                         $signer = $sigInfo.SignerCertificate.Subject
                         if ($signer -match 'CN=Microsoft Windows Hardware Compatibility Publisher') {
-                            $signResult = "Test-signed"
+                            $signResult = "ATT-signed"
                         } elseif ($signer -match 'CN=Qualcomm OEM Test Cert 2021 \(TEST ONLY\)') {
                             $signResult = "Unsigned"
                         } else {
@@ -1039,7 +1078,7 @@ switch ($mainSelection) {
                     $signResult = "N/A"
                 }
             }
-            if ($signResult -eq "Test-signed") {
+            if ($signResult -eq "ATT-signed") {
                 Write-Host -NoNewline ("  {0}: " -f $label)
                 Write-Host $signResult -ForegroundColor Blue
             } elseif ($signResult -eq "Unsigned") {
