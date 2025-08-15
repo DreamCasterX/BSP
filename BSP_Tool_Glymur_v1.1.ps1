@@ -1,11 +1,11 @@
 
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.1
-$_changedate = 8/12/2025
+$_changedate = 8/15/2025
 
 
 # User-defined settings
-$thumbdrive = "2900_BSP_27871_OSADK_inbox"
+$thumbdrive = "2900_All_drivers_noCam"
 
 
 # Fixed settings
@@ -137,9 +137,12 @@ switch ($mainSelection) {
         }
         do {
             $selection = Read-Host "Enter the number"
-            $valid = $selection -match '^\d+$' -and $selection -ge 1 -and $selection -le $folders.Count
+            $valid = $selection -match '^\d+$' -and [int]$selection -ge 1 -and [int]$selection -le $folders.Count
         } until ($valid)
         $srcRoot = $folders[$selection - 1].FullName
+		Write-Host "Selected folder: " -NoNewline
+		Write-Host "$($folders[$selection -1].Name)" -ForegroundColor Yellow
+		Write-Host ""
 
         # Create $thumbdrive folder if not exists
         $toUsbFolder = Join-Path $PWD $thumbdrive
