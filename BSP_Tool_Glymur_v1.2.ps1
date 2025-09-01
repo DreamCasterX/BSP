@@ -262,6 +262,7 @@ switch ($mainSelection) {
         $adkVersion = $null
         if (Test-Path $adkDism) {
             $adkVersion = (Get-Item $adkDism).VersionInfo.ProductVersion.ToString().Trim()
+			# $adkVersion = (Get-Package | Where-Object { $_.Name -like "Windows Deployment Tools" }).Version.ToString().Trim()
             Write-Host "ADK version: " -NoNewline
             
             # Get selected BSP version from folder name for ADK version check
@@ -425,7 +426,12 @@ switch ($mainSelection) {
         # Copy WinPE Add-ons file (winpe.win) and delete boot.wim
         Write-Host "Copying WinPE file to Thumbdrive..." -ForegroundColor Cyan
         $winpeWim = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\arm64\en-us\winpe.wim"
-        $winpeVersion = (Get-Package | Where-Object { $_.Name -like "Windows PE Boot Files (DesktopEditions)*" }).Version.ToString().Trim()
+		try {
+			$winpeVersion = (Get-Package | Where-Object { $_.Name -like "Windows PE Boot Files (DesktopEditions)*" }).Version.ToString().Trim()
+		} catch {
+			$winpeVersion = $null
+		}
+	
         if ($winpeVersion) {
             Write-Host "WinPE version: " -NoNewline
             
