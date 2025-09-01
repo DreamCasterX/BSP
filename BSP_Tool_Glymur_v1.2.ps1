@@ -1,19 +1,31 @@
 
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.1
-$_changedate = 8/15/2025
+$_version = 1.2
+$_changedate = 9/1/2025
 
 
 # User-defined settings
-$thumbdrive = "2900_All_drivers_noCam"
+$thumbdrive = "TEST"
 
 
-# Fixed settings
+# PATH settings
 $BSP_driver = "regrouped_driver_ATT_Signed"    
 $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
 $new_driver = "Updated_driver"
 $iso_folder = "ISO"
+
+# BSP to ISO mapping
+$bspToIsoMapping = @{
+	'r01900' = '26394'
+	'r02100' = '27842'
+    'r02300' = '27863'
+    'r02500' = '27863'
+    'r02900' = '27871'
+    'r03000' = '27902'
+}
+
+# Specific driver settings for Installer
 $remove_driver = @(
     "qcSensorsConfig$product_id",
     "Qccamtelesensor$product_id",
@@ -29,6 +41,7 @@ $add_driver = @(
 )
 $driverCheckList = @(
     @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
+	@{ path = "qcSensors$product_id/qcSensors$product_id.inf"; label = "Sensor" },
     @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
     @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" },
     @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" },
@@ -43,6 +56,7 @@ $driverCheckList = @(
 	@{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU" }
 )
 
+        
 # Check if run as admin
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "Please run this script with administrator privileges " -ForegroundColor Yellow
@@ -140,7 +154,7 @@ switch ($mainSelection) {
             $valid = $selection -match '^\d+$' -and [int]$selection -ge 1 -and [int]$selection -le $folders.Count
         } until ($valid)
         $srcRoot = $folders[$selection - 1].FullName
-		Write-Host "Selected folder: " -NoNewline
+		Write-Host "Selected: " -NoNewline
 		Write-Host "$($folders[$selection -1].Name)" -ForegroundColor Yellow
 		Write-Host ""
 
@@ -165,7 +179,7 @@ switch ($mainSelection) {
         $dstPrebuilt = Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder
         if (Test-Path $dstFolder) {
             do {
-                $overwrite = Read-Host "WP folder already exists, overwrite? (y/n)"
+                $overwrite = Read-Host "Thumbdrive folder already exists, overwrite? (y/n)"
             } until ($overwrite -eq 'y' -or $overwrite -eq 'Y' -or $overwrite -eq 'n' -or $overwrite -eq 'N')
             if ($overwrite -eq 'n' -or $overwrite -eq 'N') {
                 Write-Host "Skip copying BSP package files" -ForegroundColor Yellow
@@ -247,9 +261,38 @@ switch ($mainSelection) {
         $adkBcdBootFolder = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\BCDBoot"
         $adkVersion = $null
         if (Test-Path $adkDism) {
-            $adkVersion = (Get-Item $adkDism).VersionInfo.ProductVersion
+            $adkVersion = (Get-Item $adkDism).VersionInfo.ProductVersion.ToString().Trim()
             Write-Host "ADK version: " -NoNewline
-            Write-Host $adkVersion -ForegroundColor Blue
+            
+            # Get selected BSP version from folder name for ADK version check
+            $selectedBspName = $folders[$selection - 1].Name
+            $bspVersion = $null
+            if ($selectedBspName -match 'r\d{5}') {
+                $bspVersion = $selectedBspName -replace '.*(r\d{5}).*', '$1'
+            } else {
+                # Fallback: try to extract just the version number
+                if ($selectedBspName -match 'r(\d{5})') {
+                    $bspVersion = "r" + $matches[1]
+                }
+            }
+            
+            # Get expected ISO version for selected BSP
+            $expectedIsoVersionForAdk = $null
+            if ($bspVersion -and $bspToIsoMapping.ContainsKey($bspVersion)) {
+                $expectedIsoVersionForAdk = $bspToIsoMapping[$bspVersion]
+            }
+            
+
+            
+            # Check if ADK version matches expected ISO version
+            $adkVersionColor = "White"
+            if ($expectedIsoVersionForAdk -and $adkVersion -match "^.*$expectedIsoVersionForAdk.*$") {
+                $adkVersionColor = "Blue"
+            } elseif ($expectedIsoVersionForAdk) {
+                $adkVersionColor = "Red"
+            }
+            
+            Write-Host $adkVersion -ForegroundColor $adkVersionColor
         } else {
             Write-Host "ADK not found. Please install Windows ADK first!" -ForegroundColor Red
             Write-Host ""
@@ -287,9 +330,42 @@ switch ($mainSelection) {
         }
         # List ISO files, excluding "ADK"
         $isoFiles = $isoFiles | Where-Object { $_.Name -notmatch 'ADK' }
+        
+        # Get selected BSP version from folder name
+        $selectedBspName = $folders[$selection - 1].Name
+        $bspVersion = $null
+        if ($selectedBspName -match 'r\d{5}') {
+            $bspVersion = $selectedBspName -replace '.*(r\d{5}).*', '$1'
+        } else {
+            # Fallback: try to extract just the version number
+            if ($selectedBspName -match 'r(\d{5})') {
+                $bspVersion = "r" + $matches[1]
+            }
+        }
+
+        # Get expected ISO version for selected BSP
+        $expectedIsoVersion = $null
+        if ($bspVersion -and $bspToIsoMapping.ContainsKey($bspVersion)) {
+            $expectedIsoVersion = $bspToIsoMapping[$bspVersion]
+        }
+        
         Write-Host "List of ISO files:"
         for ($i = 0; $i -lt $isoFiles.Count; $i++) {
-            Write-Host ("{0}) {1}" -f ($i+1), $isoFiles[$i].Name)
+            $isoFileName = $isoFiles[$i].Name
+            $isMatched = $false
+            
+            # Check if this ISO matches the expected version for selected BSP
+            if ($expectedIsoVersion -and $isoFileName -match "^.*$expectedIsoVersion.*$") {
+                $isMatched = $true
+            }
+            
+            if ($isMatched) {
+                Write-Host ("{0}) " -f ($i+1)) -NoNewline
+                Write-Host $isoFileName -ForegroundColor Blue
+            } else {
+                Write-Host ("{0}) " -f ($i+1)) -NoNewline
+                Write-Host $isoFileName
+            }
         }
         do {
             $isoSelection = Read-Host "Enter the number"
@@ -349,10 +425,37 @@ switch ($mainSelection) {
         # Copy WinPE Add-ons file (winpe.win) and delete boot.wim
         Write-Host "Copying WinPE file to Thumbdrive..." -ForegroundColor Cyan
         $winpeWim = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\arm64\en-us\winpe.wim"
-        $winpeVersion = (Get-WmiObject -Class Win32_product | Where-Object {$_.Name -like "Windows PE Boot Files (DesktopEditions)*"} | Select-Object -ExpandProperty Version).ToString()
+        $winpeVersion = (Get-Package | Where-Object { $_.Name -like "Windows PE Boot Files (DesktopEditions)*" }).Version.ToString().Trim()
         if ($winpeVersion) {
             Write-Host "WinPE version: " -NoNewline
-            Write-Host $winpeVersion -ForegroundColor Blue
+            
+            # Get selected BSP version from folder name for WinPE version check
+            $selectedBspName = $folders[$selection - 1].Name
+            $bspVersion = $null
+            if ($selectedBspName -match 'r\d{5}') {
+                $bspVersion = $selectedBspName -replace '.*(r\d{5}).*', '$1'
+            } else {
+                # Fallback: try to extract just the version number
+                if ($selectedBspName -match 'r(\d{5})') {
+                    $bspVersion = "r" + $matches[1]
+                }
+            }
+            
+            # Get expected ISO version for selected BSP
+            $expectedIsoVersionForWinPE = $null
+            if ($bspVersion -and $bspToIsoMapping.ContainsKey($bspVersion)) {
+                $expectedIsoVersionForWinPE = $bspToIsoMapping[$bspVersion]
+            }
+            
+            # Check if WinPE version matches expected ISO version
+            $winpeVersionColor = "White"
+            if ($expectedIsoVersionForWinPE -and $winpeVersion -match "^.*$expectedIsoVersionForWinPE.*$") {
+                $winpeVersionColor = "Blue"
+            } elseif ($expectedIsoVersionForWinPE) {
+                $winpeVersionColor = "Red"
+            }
+            
+            Write-Host $winpeVersion -ForegroundColor $winpeVersionColor
         } else {
             Write-Host "WinPE Add-ons not found. Please install WinPE Add-ons first!" -ForegroundColor Red
             Write-Host ""
@@ -795,7 +898,7 @@ switch ($mainSelection) {
         }
     }
     '3' {
-        # Update drivers
+        # Update drivers  注意只能是BSP driver, 如果是WinPE driver(ADSP/qcscm/QcTreeExtOem)要重頭build避免沒替換
         Write-Host "Copying IEC customized drivers..." -ForegroundColor Cyan
         # Check if $thumbdrive exists in the current directory
         $toUsbFolder = Join-Path $PWD $thumbdrive
