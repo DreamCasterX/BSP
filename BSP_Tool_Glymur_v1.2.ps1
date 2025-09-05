@@ -1,7 +1,7 @@
 
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.2
-$_changedate = 9/1/2025
+$_changedate = 9/5/2025
 
 
 # User-defined settings
@@ -23,6 +23,7 @@ $bspToIsoMapping = @{
     'r02500' = '27863'
     'r02900' = '27871'
     'r03000' = '27902'
+	'r03300' = ''
 }
 
 # Specific driver settings for Installer
@@ -132,9 +133,8 @@ switch ($mainSelection) {
     }
     '2' {
         # Create USB installer
-        $currentScript = $MyInvocation.MyCommand.Name
-        # Ignore folders: WP/$thumbdrive/regrouped_driver
-        $folders = Get-ChildItem -Directory | Where-Object { $_.Name -ne $currentScript -and $_.Name -ne 'WP' -and $_.Name -ne $thumbdrive -and $_.Name -ne $new_driver -and $_.Name -ne $iso_folder -and $_.Name -ne 'USB_Installer' -and $_.Name -ne 'IEC_driver' -and $_.Name -ne 'ISO' }
+        # Only list folders starting with product name
+        $folders = Get-ChildItem -Directory | Where-Object { $_.Name -like ("$product*") }
         if ($folders.Count -eq 0) {
             Write-Host "No folders found" -ForegroundColor Yellow
             Write-Host ""
@@ -1208,6 +1208,9 @@ switch ($mainSelection) {
         # Copy thumbdrive to USB
         Write-Host ""
         Write-Host "Copying Thumbdrive to FAT32 USB ..." -ForegroundColor Cyan
+		Write-Host "Targeted folder: " -NoNewline
+		Write-Host "$thumbdrive" -ForegroundColor Yellow
+		Write-Host ""
         # Find $thumbdrive/WP/prebuilt/{number}/ISOGEN/emmcdl_method/Thumbdrive
         $prebuiltPath = Join-Path $PWD "$thumbdrive/WP/prebuilt"
         $numFolder = $product_id
