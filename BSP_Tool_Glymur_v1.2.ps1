@@ -1,7 +1,7 @@
 
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.2
-$_changedate = 9/5/2025
+$_changedate = 9/11/2025
 
 
 # User-defined settings
@@ -23,7 +23,8 @@ $bspToIsoMapping = @{
     'r02500' = '27863'
     'r02900' = '27871'
     'r03000' = '27902'
-	'r03300' = ''
+	'r03300' = '27902'
+	'r03500' = ''
 }
 
 # Specific driver settings for Installer
@@ -42,12 +43,12 @@ $add_driver = @(
 )
 $driverCheckList = @(
     @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
-	@{ path = "qcSensors$product_id/qcSensors$product_id.inf"; label = "Sensor" },
-    @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
+	@{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio" },
     @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" },
     @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" },
     @{ path = "qccamisp_ext$product_id/qccamisp_ext$product_id.inf"; label = "Camera (ISP)" },
-    @{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio" },
+	@{ path = "qcSensors$product_id/qcSensors$product_id.inf"; label = "Sensor" },
+    @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
     @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
     @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" },
 	@{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "qcscm" },
@@ -73,11 +74,12 @@ Write-Host "2) Create USB installer"
 Write-Host "3) Update drivers"
 Write-Host "4) Display driver info"    
 Write-Host "5) Copy thumbdrive to USB" 
+Write-Host "6) Make version file"
 Write-Host "=========================="
 
 do {
     $mainSelection = Read-Host "Select a function"
-} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5')
+} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5' -or $mainSelection -eq '6')
 
 switch ($mainSelection) {
     '1' {
@@ -490,21 +492,21 @@ switch ($mainSelection) {
         }
         Write-Host ""
 
-        # Copy IEC customized drivers
-        Write-Host "Copying IEC customized drivers..." -ForegroundColor Cyan
+        # Copy customized drivers
+        Write-Host "Copying customized drivers..." -ForegroundColor Cyan
 
         $iecDriverFolder = Join-Path $PWD $new_driver
         if (!(Test-Path $iecDriverFolder)) {
-            Write-Host "IEC driver folder not found" -ForegroundColor Red
+            Write-Host "Updated_driver folder not found" -ForegroundColor Red
             Write-Host ""
             Read-Host "Press Enter to exit..."
             return
         }
 
-        # Get all the folders in IEC_driver
+        # Get all the folders in Updated_driver
         $iecSubFolders = Get-ChildItem -Path $iecDriverFolder -Directory
         if ($iecSubFolders.Count -eq 0) {
-            Write-Host "No subfolders found in IEC_driver." -ForegroundColor Yellow
+            Write-Host "No subfolders found in Updated_driver." -ForegroundColor Yellow
             Write-Host ""
         } else {
             # Check if there's any sub-directory (Only ADSP/CDSP/HTP/qcdeviceinfo and ARM64 (qcdpps.exe/qdcmlib.dll) folders are allowed)
@@ -539,19 +541,19 @@ switch ($mainSelection) {
             }
             $dstSubFolders = Get-ChildItem -Path $dstBspDriver -Directory
 
-            # Compare the folder name between IEC_driver vs. BSP driver
+            # Compare the folder name between Updated_driver vs. BSP driver
             $iecNames = $iecSubFolders.Name
             $dstNames = $dstSubFolders.Name
             $sameNames = $iecNames | Where-Object { $dstNames -contains $_ }
             $diffNames = $iecNames | Where-Object { $dstNames -notcontains $_ }
 
-            Write-Host "IEC_driver folders with the same name in BSP driver folder:"
+            Write-Host "Updated_driver folders with the same name in BSP driver folder:"
             if ($sameNames.Count -eq 0) {
                 Write-Host "  N/A"
             } else {
                 $sameNames | ForEach-Object { Write-Host ("  " + $_) -ForegroundColor Blue }
             }
-            Write-Host "IEC_driver folders with different name:"
+            Write-Host "Updated_driver folders with different name:"
             if ($diffNames.Count -eq 0) {
                 Write-Host "  N/A"
             } else {
@@ -905,7 +907,11 @@ switch ($mainSelection) {
     }
     '3' {
         # Update drivers  注意只能是BSP driver, 如果是WinPE driver(ADSP/qcscm/QcTreeExtOem)要重頭build避免沒替換
-        Write-Host "Copying IEC customized drivers..." -ForegroundColor Cyan
+		Write-Host ""
+        Write-Host "Copying customized drivers..." -ForegroundColor Cyan
+		Write-Host "Targeted folder: " -NoNewline
+		Write-Host "$thumbdrive" -ForegroundColor Yellow
+		Write-Host ""
         # Check if $thumbdrive exists in the current directory
         $toUsbFolder = Join-Path $PWD $thumbdrive
         if (!(Test-Path $toUsbFolder)) {
@@ -920,14 +926,14 @@ switch ($mainSelection) {
         $dstBspDriver = Join-Path $prebuiltDir "$numFolder\regrouped_driver"
         $iecDriverFolder = Join-Path $PWD $new_driver
         if (!(Test-Path $iecDriverFolder)) {
-            Write-Host "IEC driver folder not found" -ForegroundColor Red
+            Write-Host "Updated_driver folder not found" -ForegroundColor Red
             Write-Host ""
             Read-Host "Press Enter to exit..."
             return
         }
         $iecSubFolders = Get-ChildItem -Path $iecDriverFolder -Directory
         if ($iecSubFolders.Count -eq 0) {
-            Write-Host "No subfolders found in IEC_driver." -ForegroundColor Yellow
+            Write-Host "No subfolders found in Updated_driver." -ForegroundColor Yellow
             Write-Host ""
         } else {
              # Check if there's any sub-directory (Only ADSP/CDSP/HTP/qcdeviceinfo and ARM64 (qcdpps.exe/qdcmlib.dll) folders are allowed)
@@ -959,13 +965,13 @@ switch ($mainSelection) {
             $dstNames = $dstSubFolders.Name
             $sameNames = $iecNames | Where-Object { $dstNames -contains $_ }
             $diffNames = $iecNames | Where-Object { $dstNames -notcontains $_ }
-            Write-Host "IEC_driver folders with the same name in BSP driver folder:"
+            Write-Host "Updated_driver folders with the same name in BSP driver folder:"
             if ($sameNames.Count -eq 0) {
                 Write-Host "  N/A"
             } else {
                 $sameNames | ForEach-Object { Write-Host ("  " + $_) -ForegroundColor Blue }
             }
-            Write-Host "IEC_driver folders with different name:"
+            Write-Host "Updated_driver folders with different name:"
             if ($diffNames.Count -eq 0) {
                 Write-Host "  N/A"
             } else {
@@ -1242,7 +1248,7 @@ switch ($mainSelection) {
             $selection = Read-Host "Enter the number to copy files"
             $valid = $selection -match '^[1-9][0-9]*$' -and $selection -ge 1 -and $selection -le $usbArray.Count
         } until ($valid)
-        $targetDrive = $usbArray[$selection - 1].DeviceID + '\'
+        $targetDrive = $usbArray[$selection - 1].DeviceID + '\\'
         # Clean USB drive
         try {
             Get-ChildItem -Path $targetDrive -Force | Remove-Item -Recurse -Force
@@ -1274,6 +1280,123 @@ switch ($mainSelection) {
         }
         Write-Host ""
         Read-Host "Press Enter to exit..."
+    }
+    '6' {
+        # Check .NET 2.0 csc.exe
+        $cscPath = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v2.0.50727\csc.exe'
+        if (!(Test-Path $cscPath)) {
+            Write-Host "Please install .Net Framnework v2.0.50727 first" -ForegroundColor Yellow
+            Write-Host "Download URL: https://www.microsoft.com/zh-tw/download/details.aspx?id=6041" -ForegroundColor Yellow
+            Write-Host ""
+            Read-Host "Press Enter to exit..."
+            return
+        }
+
+        # List BSP source packages
+        $folders = Get-ChildItem -Directory | Where-Object { $_.Name -like ("$product*") }
+        if ($folders.Count -eq 0) {
+            Write-Host "No folders found" -ForegroundColor Yellow
+            Write-Host ""
+            Read-Host "Press Enter to exit..."
+            return
+        }
+        Write-Host ""
+        Write-Host "List of the BSP source packages:"
+        $maxIndexLen = ($folders.Count).ToString().Length
+        for ($i = 0; $i -lt $folders.Count; $i++) {
+            $num = ($i+1).ToString().PadLeft($maxIndexLen)
+            Write-Host ("{0}) {1}" -f $num, $folders[$i].Name)
+        }
+        do {
+            $selection = Read-Host "Enter the number"
+            $valid = $selection -match '^\d+$' -and [int]$selection -ge 1 -and [int]$selection -le $folders.Count
+        } until ($valid)
+        $selectedName = $folders[$selection - 1].Name
+		Write-Host "Selected: " -NoNewline
+		Write-Host "$selectedName" -ForegroundColor Yellow
+		Write-Host ""
+
+        # Parse r0xxxx.x to ver1 (xxxx) and ver2 (x)
+        $ver1 = $null
+        $ver2 = $null
+        if ($selectedName -match 'r(\d{5})\.(\d+)') {
+            $rnum = $matches[1]
+            $ver2 = $matches[2]
+            try {
+                $ver1 = [int]$rnum  # casting drops leading zero (e.g., 03000 -> 3000)
+            } catch {
+                $ver1 = $rnum.TrimStart('0')
+                if ([string]::IsNullOrEmpty($ver1)) { $ver1 = '0' }
+            }
+        } else {
+            Write-Host "Selected folder name does not contain r0xxxx.x pattern" -ForegroundColor Red
+            Write-Host ""
+            Read-Host "Press Enter to exit..."
+            return
+        }
+
+        # Create CSVer.cs content
+        $csContent = @"
+using System.Reflection;
+// General Information about an assembly is controlled through the following 
+// set of attributes. Change these attribute values to modify the information
+// associated with an assembly.
+[assembly: AssemblyTitle("Version")]
+[assembly: AssemblyDescription("Something that Ron wanted")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("HP Company")]
+[assembly: AssemblyProduct("Version")]
+[assembly: AssemblyCopyright("Copyright © 2025 HP Development Company, L.P")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
+[assembly: AssemblyVersion("$ver1.$ver2")]
+[assembly: AssemblyFileVersion("$ver1.$ver2")]
+namespace SigFile
+{
+class Program
+{
+static void Main(string[] args)
+{
+}
+}
+}
+"@
+
+        $import_file = "Version.cs"
+        $export_file = "Version.exe"
+        $destination = (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v2.0.50727\')
+
+        try {
+            Set-Content -Path .\$import_file -Value $csContent -Encoding Default
+        } catch {
+            Write-Host "Failed to write CSVer.cs: $_" -ForegroundColor Red
+            Write-Host ""
+            Read-Host "Press Enter to exit..."
+            return
+        }
+
+        # Compile using csc.exe
+		Write-Host "Building CSVer.exe..." -ForegroundColor Cyan
+        if (Test-Path .\$import_file) {
+            try {
+                Copy-Item -Path .\$import_file -Destination ($destination + $import_file) -Force
+                Push-Location $destination
+                .\csc.exe $import_file
+                Remove-Item -Path .\$import_file -Force
+                Pop-Location
+                Move-Item -Path ($destination + $export_file) -Destination .\ -Force
+				if (Test-Path .\$import_file) { Remove-Item -Path .\$import_file -Force }
+                Write-Host "Completed!" -ForegroundColor Green
+                Write-Host ""
+            } catch {
+                Write-Host "Failed to build or move CSVer.exe: $_" -ForegroundColor Red
+                Write-Host ""
+                Read-Host "Press Enter to exit..."
+                return
+            }
+        } else {
+            Write-Host "CSVer.cs file not found" -ForegroundColor Red
+        }
     }
 }
 
