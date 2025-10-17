@@ -1,15 +1,14 @@
-
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.2
-$_changedate = 9/11/2025
+$_version = 1.3
+$_changedate = 10/16/2025
 
 
 # User-defined settings
-$thumbdrive = "TEST"
+$thumbdrive = "Dolcelatte_r3900"
 
 
 # PATH settings
-$BSP_driver = "regrouped_driver_ATT_Signed"    
+$BSP_driver = "regrouped_driver_ATT_Signed"
 $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
 $new_driver = "Updated_driver"
@@ -24,7 +23,11 @@ $bspToIsoMapping = @{
     'r02900' = '27871'
     'r03000' = '27902'
 	'r03300' = '27902'
-	'r03500' = ''
+	'r03500' = '27924'
+	'r03900' = '27950'
+	'r04000' = ''
+	'r04300' = ''
+	'r04500' = ''
 }
 
 # Specific driver settings for Installer
@@ -44,6 +47,7 @@ $add_driver = @(
 $driverCheckList = @(
     @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
 	@{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio" },
+	@{ path = "qcadx_ext$product_id/qcadx_ext$product_id.inf"; label = "SVA" },
     @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" },
     @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" },
     @{ path = "qccamisp_ext$product_id/qccamisp_ext$product_id.inf"; label = "Camera (ISP)" },
@@ -51,11 +55,14 @@ $driverCheckList = @(
     @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
     @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
     @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" },
-	@{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "qcscm" },
+	@{ path = "QcTreeExtQcom$product_id/QcTreeExtQcom$product_id.inf"; label = "QcTreeExtQcom" },
+	@{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "QcSCM" },
 	@{ path = "qcbluetooth$product_id/qcbluetooth$product_id.inf"; label = "BT" },
 	@{ path = "qci2c$product_id/qci2c$product_id.inf"; label = "I2C bus" },
 	@{ path = "qcspi$product_id/qcspi$product_id.inf"; label = "SPI bus" },
-	@{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU" }
+	@{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU (cDSP)" },
+	@{ path = "QcXhciFilter$product_id/QcXhciFilter$product_id.inf"; label = "xHCI" },
+	@{ path = "QcUsb4Filter$product_id/QcUsb4Filter$product_id.inf"; label = "USB4" }
 )
 
         
@@ -71,10 +78,10 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Write-Host "=========================="
 Write-Host "1) Download BSP package"
 Write-Host "2) Create USB installer"
-Write-Host "3) Update drivers"
+Write-Host "3) Update drivers (non-WinPE)"
 Write-Host "4) Display driver info"    
 Write-Host "5) Copy thumbdrive to USB" 
-Write-Host "6) Make version file"
+Write-Host "6) Make version.exe"
 Write-Host "=========================="
 
 do {
@@ -584,6 +591,108 @@ switch ($mainSelection) {
                 Write-Host "No same name folders to replace."
             }
             Write-Host ""
+
+            # Ask to add different-name folders
+            if ($diffNames.Count -gt 0) {
+                do {
+                    $addDiff = Read-Host "Add different name folders to BSP driver folder? (y/n)"
+                } until ($addDiff -eq 'y' -or $addDiff -eq 'Y' -or $addDiff -eq 'n' -or $addDiff -eq 'N')
+                if ($addDiff -eq 'y' -or $addDiff -eq 'Y') {
+                    # 1) Copy different-name folders into regrouped_driver
+                    foreach ($name in $diffNames) {
+                        $srcPath = Join-Path $iecDriverFolder $name
+                        try {
+                            Copy-Item -Path $srcPath -Destination $dstBspDriver -Recurse -Force
+                        } catch {
+                            Write-Host "Failed to copy folder: $name" -ForegroundColor Red
+                        }
+                    }
+
+                    # 2) Show category menu and read selection
+                    Write-Host ""
+                    Write-Host "1) drivers"
+                    Write-Host "2) DriversForCDPS"
+                    Write-Host "3) DriversForCRD"
+                    Write-Host "4) DriversForQCB"
+                    Write-Host "5) DriversForWinPE"
+					do {
+						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,5)"
+						$catSel = $catSel -replace '\\s',''
+						$valid = $catSel -match '^[1-5](,[1-5])*$'
+					} until ($valid)
+					$catMap = @{ '1'='drivers'; '2'='DriversForCDPS'; '3'='DriversForCRD'; '4'='DriversForQCB'; '5'='DriversForWinPE' }
+					$selectedCategories = ($catSel -split ',') | Select-Object -Unique | ForEach-Object { $catMap[$_] }
+
+					# 3) Append different-name folders into drivers.txt under the selected category section
+					foreach ($category in $selectedCategories) {
+                    $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
+                    $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
+                    if (Test-Path $driversTxtPath) {
+                        try {
+                            $lines = Get-Content $driversTxtPath -Encoding Default
+                            function Normalize([string]$s) { return ($s -replace "[\u200B\uFEFF]", "").Trim() }
+                            $headerIndex = -1
+                            $rx = [regex]::new('^\s*[\\\/]\s*' + [regex]::Escape($category) + '\s*$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                            for ($i = 0; $i -lt $lines.Count; $i++) {
+                                $t = Normalize $lines[$i]
+                                if ($rx.IsMatch($t)) { $headerIndex = $i; break }
+                            }
+                            if ($headerIndex -ge 0) {
+                                # 找到本區塊結束位置（下一個標頭或檔尾）
+                                $endOfSection = $headerIndex + 1
+                                for ($j = $endOfSection; $j -lt $lines.Count; $j++) {
+                                    $trimJ = Normalize $lines[$j]
+                                    if ($trimJ -match '^\s*[\\/]') { break }
+                                    $endOfSection = $j + 1
+                                }
+                                # 插入點放在區塊尾端的第一個非空白行之後（去掉尾端多餘空白行）
+                                $insertIndex = $endOfSection
+                                while ($insertIndex -gt ($headerIndex + 1) -and (($lines[$insertIndex-1].Trim()).Length -eq 0)) {
+                                    $insertIndex--
+                                }
+                                foreach ($name in $diffNames) {
+                                    if ($insertIndex -ge $lines.Count) {
+                                        $lines = $lines + @($name)
+                                    } else {
+                                        $lines = $lines[0..($insertIndex-1)] + @($name) + $lines[$insertIndex..($lines.Count-1)]
+                                    }
+                                    $insertIndex++
+                                }
+                                Set-Content -Path $driversTxtPath -Value $lines -Encoding Default
+								# 同步到 Thumbdrive 根目錄的 drivers.txt（若存在）
+								try {
+									$thumbTxt = Join-Path $thumbdriveDst 'drivers.txt'
+									if (Test-Path $thumbTxt) {
+										Set-Content -Path $thumbTxt -Value $lines -Encoding Default
+									}
+								} catch {}
+								Write-Host "drivers.txt updated for category: " -NoNewline
+								Write-Host "$category" -ForegroundColor Yellow
+                            } else {
+                                Write-Host "Category header not found in drivers.txt: $category" -ForegroundColor Yellow
+                                # 列出偵測到的區塊，協助除錯
+                                $found = @()
+                                for ($k = 0; $k -lt $lines.Count; $k++) {
+                                    $t2 = Normalize $lines[$k]
+                                    if ($t2.StartsWith("/") -or $t2.StartsWith("\\")) {
+                                        $found += ($t2.TrimStart('/', '\\')).Trim()
+                                    }
+                                }
+                                if ($found.Count -gt 0) {
+                                    Write-Host ("Detected sections: " + ($found -join ', ')) -ForegroundColor Yellow
+                                }
+                            }
+                        } catch {
+                            Write-Host "Failed to update drivers.txt: $_" -ForegroundColor Red
+                        }
+                    } else {
+                        Write-Host "drivers.txt not found at $driversTxtPath" -ForegroundColor Yellow
+                    }
+					}
+                } else {
+                    Write-Host "Skip adding different name folders" -ForegroundColor Yellow
+                }
+            }
         }
         
         # Modify pre-loaded driver in DesktopScripts\drivers
@@ -630,6 +739,13 @@ switch ($mainSelection) {
                             }
                         }
                         Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
+                        # 同步到 Thumbdrive\drivers.txt（若存在）
+                        try {
+                            $thumbTxt2 = Join-Path $thumbdriveDst 'drivers.txt'
+                            if (Test-Path $thumbTxt2) {
+                                Set-Content -Path $thumbTxt2 -Value $newLines -Encoding Default
+                            }
+                        } catch {}
                         Write-Host "Completed!" -ForegroundColor Green
                     } catch {
                         Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
@@ -1001,6 +1117,109 @@ switch ($mainSelection) {
                 Write-Host "No same name folders to replace."
             }
             Write-Host ""
+
+            # Ask to add different-name folders
+            if ($diffNames.Count -gt 0) {
+                do {
+                    $addDiff = Read-Host "Add different name folders to BSP driver folder? (y/n)"
+                } until ($addDiff -eq 'y' -or $addDiff -eq 'Y' -or $addDiff -eq 'n' -or $addDiff -eq 'N')
+                if ($addDiff -eq 'y' -or $addDiff -eq 'Y') {
+                    # 1) Copy different-name folders into regrouped_driver
+                    foreach ($name in $diffNames) {
+                        $srcPath = Join-Path $iecDriverFolder $name
+                        try {
+                            Copy-Item -Path $srcPath -Destination $dstBspDriver -Recurse -Force
+                        } catch {
+                            Write-Host "Failed to copy folder: $name" -ForegroundColor Red
+                        }
+                    }
+
+                    # 2) Show category menu and read selection
+                    Write-Host ""
+                    Write-Host "1) drivers"
+                    Write-Host "2) DriversForCDPS"
+                    Write-Host "3) DriversForCRD"
+                    Write-Host "4) DriversForQCB"
+                    Write-Host "5) DriversForWinPE"
+					do {
+						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,5)"
+						$catSel = $catSel -replace '\\s',''
+						$valid = $catSel -match '^[1-5](,[1-5])*$'
+					} until ($valid)
+					$catMap = @{ '1'='drivers'; '2'='DriversForCDPS'; '3'='DriversForCRD'; '4'='DriversForQCB'; '5'='DriversForWinPE' }
+					$selectedCategories = ($catSel -split ',') | Select-Object -Unique | ForEach-Object { $catMap[$_] }
+
+					# 3) Append different-name folders into drivers.txt under the selected category section
+					foreach ($category in $selectedCategories) {
+                    $dstPrebuilt = Join-Path $prebuiltDir $numFolder
+                    $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
+                    $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
+                    if (Test-Path $driversTxtPath) {
+                        try {
+                            $lines = Get-Content $driversTxtPath -Encoding Default
+                            function Normalize([string]$s) { return ($s -replace "[\u200B\uFEFF]", "").Trim() }
+                            $headerIndex = -1
+                            $rx = [regex]::new('^\s*[\\\/]\s*' + [regex]::Escape($category) + '\s*$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                            for ($i = 0; $i -lt $lines.Count; $i++) {
+                                $t = Normalize $lines[$i]
+                                if ($rx.IsMatch($t)) { $headerIndex = $i; break }
+                            }
+                            if ($headerIndex -ge 0) {
+                                # 找到本區塊結束位置（下一個標頭或檔尾）
+                                $endOfSection = $headerIndex + 1
+                                for ($j = $endOfSection; $j -lt $lines.Count; $j++) {
+                                    $trimJ = Normalize $lines[$j]
+                                    if ($trimJ -match '^\s*[\\/]') { break }
+                                    $endOfSection = $j + 1
+                                }
+                                # 插入點放在區塊尾端的第一個非空白行之後（去掉尾端多餘空白行）
+                                $insertIndex = $endOfSection
+                                while ($insertIndex -gt ($headerIndex + 1) -and (($lines[$insertIndex-1].Trim()).Length -eq 0)) {
+                                    $insertIndex--
+                                }
+                                foreach ($name in $diffNames) {
+                                    if ($insertIndex -ge $lines.Count) {
+                                        $lines = $lines + @($name)
+                                    } else {
+                                        $lines = $lines[0..($insertIndex-1)] + @($name) + $lines[$insertIndex..($lines.Count-1)]
+                                    }
+                                    $insertIndex++
+                                }
+                                Set-Content -Path $driversTxtPath -Value $lines -Encoding Default
+								# 同步到 Thumbdrive 根目錄的 drivers.txt（若存在）
+								try {
+									$thumbdriveDst = Join-Path (Join-Path $prebuiltDir $numFolder) 'ISOGEN/emmcdl_method/Thumbdrive'
+									$thumbTxt = Join-Path $thumbdriveDst 'drivers.txt'
+									if (Test-Path $thumbTxt) {
+										Set-Content -Path $thumbTxt -Value $lines -Encoding Default
+									}
+								} catch {}
+								Write-Host "drivers.txt updated for category: $category" -ForegroundColor Green
+                            } else {
+                                Write-Host "Category header not found in drivers.txt: $category" -ForegroundColor Yellow
+                                # 列出偵測到的區塊，協助除錯
+                                $found = @()
+                                for ($k = 0; $k -lt $lines.Count; $k++) {
+                                    $t2 = Normalize $lines[$k]
+                                    if ($t2.StartsWith("/") -or $t2.StartsWith("\\")) {
+                                        $found += ($t2.TrimStart('/', '\\')).Trim()
+                                    }
+                                }
+                                if ($found.Count -gt 0) {
+                                    Write-Host ("Detected sections: " + ($found -join ', ')) -ForegroundColor Yellow
+                                }
+                            }
+                        } catch {
+                            Write-Host "Failed to update drivers.txt: $_" -ForegroundColor Red
+                        }
+                    } else {
+                        Write-Host "drivers.txt not found at $driversTxtPath" -ForegroundColor Yellow
+                    }
+					}
+                } else {
+                    Write-Host "Skip adding different name folders" -ForegroundColor Yellow
+                }
+            }
         }
 
         # Modify pre-loaded driver in DesktopScripts\drivers
@@ -1048,6 +1267,14 @@ switch ($mainSelection) {
                             }
                         }
                         Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
+                        # 同步到 Thumbdrive\drivers.txt（若存在）
+                        try {
+                            $thumbdriveDst = Join-Path (Join-Path $dstPrebuilt 'ISOGEN/emmcdl_method') 'Thumbdrive'
+                            $thumbTxt3 = Join-Path $thumbdriveDst 'drivers.txt'
+                            if (Test-Path $thumbTxt3) {
+                                Set-Content -Path $thumbTxt3 -Value $newLines -Encoding Default
+                            }
+                        } catch {}
                         Write-Host "Completed!" -ForegroundColor Green
                     } catch {
                         Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
@@ -1335,7 +1562,7 @@ switch ($mainSelection) {
             return
         }
 
-        # Create CSVer.cs content
+        # Create Version.cs content
         $csContent = @"
 using System.Reflection;
 // General Information about an assembly is controlled through the following 
@@ -1369,14 +1596,16 @@ static void Main(string[] args)
         try {
             Set-Content -Path .\$import_file -Value $csContent -Encoding Default
         } catch {
-            Write-Host "Failed to write CSVer.cs: $_" -ForegroundColor Red
+            Write-Host "Failed to write Version.cs: $_" -ForegroundColor Red
             Write-Host ""
             Read-Host "Press Enter to exit..."
             return
         }
 
         # Compile using csc.exe
-		Write-Host "Building CSVer.exe..." -ForegroundColor Cyan
+		Write-Host "Building Version.exe..." -ForegroundColor Cyan
+		Write-Host "Version: " -NoNewline
+		Write-Host "$ver1.$ver2" -ForegroundColor Blue
         if (Test-Path .\$import_file) {
             try {
                 Copy-Item -Path .\$import_file -Destination ($destination + $import_file) -Force
@@ -1389,13 +1618,13 @@ static void Main(string[] args)
                 Write-Host "Completed!" -ForegroundColor Green
                 Write-Host ""
             } catch {
-                Write-Host "Failed to build or move CSVer.exe: $_" -ForegroundColor Red
+                Write-Host "Failed to build or move Version.exe: $_" -ForegroundColor Red
                 Write-Host ""
                 Read-Host "Press Enter to exit..."
                 return
             }
         } else {
-            Write-Host "CSVer.cs file not found" -ForegroundColor Red
+            Write-Host "Version.cs file not found" -ForegroundColor Red
         }
     }
 }
