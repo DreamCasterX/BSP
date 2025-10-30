@@ -1,10 +1,10 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.3
-$_changedate = 10/16/2025
+$_changedate = 10/30/2025
 
 
 # User-defined settings
-$thumbdrive = "Dolcelatte_r3900"
+$thumbdrive = "Cashmere_r3900_x2"
 
 
 # PATH settings
@@ -13,6 +13,7 @@ $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
 $new_driver = "Updated_driver"
 $iso_folder = "ISO"
+$fuse_folder = "FUSE"
 
 # BSP to ISO mapping
 $bspToIsoMapping = @{
@@ -24,7 +25,9 @@ $bspToIsoMapping = @{
     'r03000' = '27902'
 	'r03300' = '27902'
 	'r03500' = '27924'
+	'r03500_x2' = '27924'
 	'r03900' = '27950'
+	'r03900_x2' = '27965'
 	'r04000' = ''
 	'r04300' = ''
 	'r04500' = ''
@@ -82,11 +85,12 @@ Write-Host "3) Update drivers (non-WinPE)"
 Write-Host "4) Display driver info"    
 Write-Host "5) Copy thumbdrive to USB" 
 Write-Host "6) Make version.exe"
+Write-Host "7) Inspect secure sign"
 Write-Host "=========================="
 
 do {
     $mainSelection = Read-Host "Select a function"
-} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5' -or $mainSelection -eq '6')
+} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5' -or $mainSelection -eq '6' -or $mainSelection -eq '7')
 
 switch ($mainSelection) {
     '1' {
@@ -277,8 +281,11 @@ switch ($mainSelection) {
             # Get selected BSP version from folder name for ADK version check
             $selectedBspName = $folders[$selection - 1].Name
             $bspVersion = $null
-            if ($selectedBspName -match 'r\d{5}') {
-                $bspVersion = $selectedBspName -replace '.*(r\d{5}).*', '$1'
+            # Try to match r03900_x2 format first
+            if ($selectedBspName -match 'r\d{5}\.\d+_x(\d+)') {
+                $bspVersion = "r" + ($selectedBspName -replace '.*r(\d{5})\.\d+_x(\d+).*', '$1') + "_x" + ($selectedBspName -replace '.*r(\d{5})\.\d+_x(\d+).*', '$2')
+            } elseif ($selectedBspName -match 'r\d{5}(_x\d+)?') {
+                $bspVersion = $selectedBspName -replace '.*(r\d{5}(_x\d+)?).*', '$1'
             } else {
                 # Fallback: try to extract just the version number
                 if ($selectedBspName -match 'r(\d{5})') {
@@ -344,8 +351,11 @@ switch ($mainSelection) {
         # Get selected BSP version from folder name
         $selectedBspName = $folders[$selection - 1].Name
         $bspVersion = $null
-        if ($selectedBspName -match 'r\d{5}') {
-            $bspVersion = $selectedBspName -replace '.*(r\d{5}).*', '$1'
+        # Try to match r03900_x2 format first
+        if ($selectedBspName -match 'r\d{5}\.\d+_x(\d+)') {
+            $bspVersion = "r" + ($selectedBspName -replace '.*r(\d{5})\.\d+_x(\d+).*', '$1') + "_x" + ($selectedBspName -replace '.*r(\d{5})\.\d+_x(\d+).*', '$2')
+        } elseif ($selectedBspName -match 'r\d{5}(_x\d+)?') {
+            $bspVersion = $selectedBspName -replace '.*(r\d{5}(_x\d+)?).*', '$1'
         } else {
             # Fallback: try to extract just the version number
             if ($selectedBspName -match 'r(\d{5})') {
@@ -447,8 +457,11 @@ switch ($mainSelection) {
             # Get selected BSP version from folder name for WinPE version check
             $selectedBspName = $folders[$selection - 1].Name
             $bspVersion = $null
-            if ($selectedBspName -match 'r\d{5}') {
-                $bspVersion = $selectedBspName -replace '.*(r\d{5}).*', '$1'
+            # Try to match r03900_x2 format first
+            if ($selectedBspName -match 'r\d{5}\.\d+_x(\d+)') {
+                $bspVersion = "r" + ($selectedBspName -replace '.*r(\d{5})\.\d+_x(\d+).*', '$1') + "_x" + ($selectedBspName -replace '.*r(\d{5})\.\d+_x(\d+).*', '$2')
+            } elseif ($selectedBspName -match 'r\d{5}(_x\d+)?') {
+                $bspVersion = $selectedBspName -replace '.*(r\d{5}(_x\d+)?).*', '$1'
             } else {
                 # Fallback: try to extract just the version number
                 if ($selectedBspName -match 'r(\d{5})') {
@@ -616,7 +629,7 @@ switch ($mainSelection) {
                     Write-Host "4) DriversForQCB"
                     Write-Host "5) DriversForWinPE"
 					do {
-						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,5)"
+						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,3)"
 						$catSel = $catSel -replace '\\s',''
 						$valid = $catSel -match '^[1-5](,[1-5])*$'
 					} until ($valid)
@@ -1142,7 +1155,7 @@ switch ($mainSelection) {
                     Write-Host "4) DriversForQCB"
                     Write-Host "5) DriversForWinPE"
 					do {
-						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,5)"
+						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,3)"
 						$catSel = $catSel -replace '\\s',''
 						$valid = $catSel -match '^[1-5](,[1-5])*$'
 					} until ($valid)
@@ -1346,6 +1359,7 @@ switch ($mainSelection) {
         $driverDir = Join-Path $PWD $new_driver
         if (!(Test-Path $driverDir)) {
             Write-Host "No driver folder found!" -ForegroundColor Red
+            Write-Host ""
             return
         }
         # Check if $new_driver is not empty
@@ -1626,6 +1640,89 @@ static void Main(string[] args)
         } else {
             Write-Host "Version.cs file not found" -ForegroundColor Red
         }
+    }
+    '7' {
+        # Validate secure sign
+        Write-Host "" 
+        Write-Host "Inspecting secure sign..." -ForegroundColor Cyan
+        # Resolve FUSE directory
+        $fuseDir = Join-Path $PWD $fuse_folder
+        if (!(Test-Path $fuseDir)) {
+            Write-Host "FUSE folder not found" -ForegroundColor Red
+            Write-Host ""
+
+            return
+        }
+        $fuseItems = Get-ChildItem -Path $fuseDir -Force -ErrorAction SilentlyContinue
+        if (-not $fuseItems -or $fuseItems.Count -eq 0) {
+            Write-Host "FUSE folder is empty" -ForegroundColor Red
+            Write-Host ""
+            return
+        }
+
+        # Check sectools.exe exists
+        $sectoolsPath = Join-Path $fuseDir 'sectools.exe'
+        if (!(Test-Path $sectoolsPath)) {
+            Write-Host "sectools.exe not found in FUSE folder" -ForegroundColor Red
+			Write-Host "Please copy it from BSP source \common\sectoolsv2\ext\Windows\sectools.exe" -ForegroundColor Red
+            Write-Host ""
+            return
+        }
+
+        # Collect target images (*.elf, *.mbn)
+        $elfs = Get-ChildItem -Path $fuseDir -Filter *.elf -File -ErrorAction SilentlyContinue
+        $mbns = Get-ChildItem -Path $fuseDir -Filter *.mbn -File -ErrorAction SilentlyContinue
+        $images = @()
+        if ($elfs) { $images += $elfs }
+        if ($mbns) { $images += $mbns }
+        if (-not $images -or $images.Count -eq 0) {
+            Write-Host "No .elf or .mbn files found in FUSE folder." -ForegroundColor Red
+            Write-Host ""
+            return
+        }
+
+        # Iterate and inspect OEM ID
+        Write-Host "Found $($images.Count) image file(s)"
+        foreach ($img in $images) {
+            try {
+                Push-Location $fuseDir
+                $output = & $sectoolsPath secure-image "$($img.FullName)" --inspect 2>&1
+                Pop-Location
+
+                $oemId = $null
+                $prodId = $null
+                foreach ($line in $output) {
+                    if ($null -eq $line -or $line.Trim().Length -eq 0) { continue }
+                    if (-not $oemId -and ($line -match '^\s*\|\s*OEM\s*ID:\s*\|\s*([^|]+)')) { $oemId = ($matches[1]).Trim() }
+                    if (-not $prodId -and ($line -match '^\s*\|\s*OEM\s*Product\s*ID:\s*\|\s*([^|]+)')) { $prodId = ($matches[1]).Trim() }
+                }
+                # Fallback: relaxed search without the second pipe pattern
+                if (-not $oemId) {
+                    $relaxed = $output | Where-Object { $_ -match 'OEM\s*ID:' } | Select-Object -First 1
+                    if ($relaxed -and ($relaxed -match 'OEM\s*ID:\s*\|?\s*([^|]+)')) { $oemId = ($matches[1]).Trim() }
+                }
+                if (-not $prodId) {
+                    $relaxed2 = $output | Where-Object { $_ -match 'OEM\s*Product\s*ID:' } | Select-Object -First 1
+                    if ($relaxed2 -and ($relaxed2 -match 'OEM\s*Product\s*ID:\s*\|?\s*([^|]+)')) { $prodId = ($matches[1]).Trim() }
+                }
+
+                Write-Host ("  {0} " -f $img.Name) -ForegroundColor Yellow
+                # OEM ID line: label default color, value colored only
+                Write-Host "      OEM ID: " -NoNewline  
+                $oemVal = if ($oemId) { $oemId.Trim() } else { 'N/A' }
+                if ($oemVal -eq 'N/A' -or $oemVal -match '^(?i)0x0$') { Write-Host $oemVal -ForegroundColor Red } else { Write-Host $oemVal -ForegroundColor Blue }
+                # OEM Product ID line: label default color, value colored only
+                Write-Host "      OEM Product ID: " -NoNewline
+                $prodVal = if ($prodId) { $prodId.Trim() } else { 'N/A' }
+                if ($prodVal -eq 'N/A' -or $prodVal -match '^(?i)0x0$') { Write-Host $prodVal -ForegroundColor Red } else { Write-Host $prodVal -ForegroundColor Blue }
+            } catch {
+                try { Pop-Location } catch {}
+                Write-Host -NoNewline ("  {0} " -f $img.Name) -ForegroundColor Yellow
+                Write-Host ("Failed to inspect: {0}" -f $_) -ForegroundColor Red
+            }
+        }
+        Write-Host "Completed!" -ForegroundColor Green
+        Write-Host ""
     }
 }
 
