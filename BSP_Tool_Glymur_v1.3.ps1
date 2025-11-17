@@ -1,16 +1,17 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.3
-$_changedate = 10/30/2025
+$_changedate = 11/12/2025
 
 
 # User-defined settings
-$thumbdrive = "Cashmere_r3900_x2"
+$thumbdrive = "TEST"
 
 
 # PATH settings
 $BSP_driver = "regrouped_driver_ATT_Signed"
 $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
+$enable_debugMode = $false
 $new_driver = "Updated_driver"
 $iso_folder = "ISO"
 $fuse_folder = "FUSE"
@@ -28,12 +29,14 @@ $bspToIsoMapping = @{
 	'r03500_x2' = '27924'
 	'r03900' = '27950'
 	'r03900_x2' = '27965'
-	'r04000' = ''
+	'r04000' = '27965'
+	'r04000_x1' = '27965'
+    'r04100' = ''
 	'r04300' = ''
 	'r04500' = ''
 }
 
-# Specific driver settings for Installer
+# Specific driver settings for Installer (CashmereQ only)
 $remove_driver = @(
     "qcSensorsConfig$product_id",
     "Qccamtelesensor$product_id",
@@ -58,15 +61,67 @@ $driverCheckList = @(
     @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
     @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
     @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" },
-	@{ path = "QcTreeExtQcom$product_id/QcTreeExtQcom$product_id.inf"; label = "QcTreeExtQcom" },
-	@{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "QcSCM" },
-	@{ path = "qcbluetooth$product_id/qcbluetooth$product_id.inf"; label = "BT" },
-	@{ path = "qci2c$product_id/qci2c$product_id.inf"; label = "I2C bus" },
-	@{ path = "qcspi$product_id/qcspi$product_id.inf"; label = "SPI bus" },
-	@{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU (cDSP)" },
-	@{ path = "QcXhciFilter$product_id/QcXhciFilter$product_id.inf"; label = "xHCI" },
-	@{ path = "QcUsb4Filter$product_id/QcUsb4Filter$product_id.inf"; label = "USB4" }
+	@{ path = "QcTreeExtQcom$product_id/QcTreeExtQcom$product_id.inf"; label = "QcTreeExtQcom" }
+	# @{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU (cDSP)" },
+	# @{ path = "QcXhciFilter$product_id/QcXhciFilter$product_id.inf"; label = "xHCI" },
+	# @{ path = "QcUsb4Filter$product_id/QcUsb4Filter$product_id.inf"; label = "USB4" }
+	# @{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "QcSCM" },
+	# @{ path = "qcbluetooth$product_id/qcbluetooth$product_id.inf"; label = "BT" },
+	# @{ path = "qci2c$product_id/qci2c$product_id.inf"; label = "I2C bus" },
+	# @{ path = "qcspi$product_id/qcspi$product_id.inf"; label = "SPI bus" }
 )
+
+function Set-DebugModeInTotalUpdate {
+    param(
+        [string]$DesktopScriptsPath,
+        [bool]$EnableDebug,
+        [switch]$SuppressMessages,
+        [switch]$SkipCompletionMessage
+    )
+
+    if (-not $DesktopScriptsPath) { return $false }
+    $totalUpdatePath = Join-Path $DesktopScriptsPath 'TotalUpdate.bat'
+    if (!(Test-Path $totalUpdatePath)) {
+        if (-not $SuppressMessages) {
+            Write-Host "TotalUpdate.bat not found under $DesktopScriptsPath" -ForegroundColor Yellow
+        }
+        return $false
+    }
+
+    if (-not $SuppressMessages) {
+        if ($EnableDebug) {
+            Write-Host "Enabling debug mode in TotalUpdate.bat..." -ForegroundColor Cyan
+        } else {
+            Write-Host "Disabling debug mode in TotalUpdate.bat..." -ForegroundColor Cyan
+        }
+    }
+
+    $replacement = if ($EnableDebug) { 'bcdedit /set {default} debug on' } else { 'bcdedit /set {default} debug off' }
+    $pattern = 'bcdedit\s*/set\s*\{default\}\s*debug\s*(on|off)'
+    $success = $false
+
+    try {
+        $content = Get-Content -Path $totalUpdatePath -Raw -Encoding Default
+        $newContent = [System.Text.RegularExpressions.Regex]::Replace(
+            $content,
+            $pattern,
+            $replacement,
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+        )
+        if ($content -ne $newContent) {
+            Set-Content -Path $totalUpdatePath -Value $newContent -Encoding Default
+        }
+        $success = $true
+    } catch {
+        Write-Host "Failed to update debug mode in TotalUpdate.bat: $_" -ForegroundColor Red
+    }
+
+    if ($success -and -not $SkipCompletionMessage -and -not $SuppressMessages) {
+        Write-Host "Completed!" -ForegroundColor Green
+    }
+
+    return $success
+}
 
         
 # Check if run as admin
@@ -190,6 +245,7 @@ switch ($mainSelection) {
         }
         $dstFolder = Join-Path -Path (Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder) 'ISOGEN/emmcdl_method'
         $dstPrebuilt = Join-Path -Path (Join-Path -Path (Join-Path -Path $toUsbFolder 'WP') 'prebuilt') $numFolder
+        $debugTargets = @()
         if (Test-Path $dstFolder) {
             do {
                 $overwrite = Read-Host "Thumbdrive folder already exists, overwrite? (y/n)"
@@ -201,6 +257,10 @@ switch ($mainSelection) {
                 Remove-Item -Path $dstFolder -Recurse -Force
                 New-Item -Path $dstFolder -ItemType Directory -Force | Out-Null
                 Copy-Item -Path $srcThumbdrive -Destination $dstFolder -Recurse -Force
+                $thumbdriveRoot = Join-Path $dstFolder 'Thumbdrive'
+                if (Test-Path $thumbdriveRoot) {
+                    $debugTargets += $thumbdriveRoot
+                }
                 Write-Host "Completed!" -ForegroundColor Green
                 Write-Host ""
                 # Copy DesktopScripts
@@ -209,6 +269,7 @@ switch ($mainSelection) {
                 if (Test-Path $srcDesktopScripts) {
                     if (Test-Path $dstDesktopScripts) { Remove-Item -Path $dstDesktopScripts -Recurse -Force }
                     Copy-Item -Path $srcDesktopScripts -Destination $dstPrebuilt -Recurse -Force
+                    if (Test-Path $dstDesktopScripts) { $debugTargets += $dstDesktopScripts }
                 }
                 # Copy firmware
                 $srcFirmware = Join-Path (Join-Path $prebuiltPath $numFolder) 'firmware'
@@ -235,6 +296,10 @@ switch ($mainSelection) {
         } else {
             New-Item -Path $dstFolder -ItemType Directory -Force | Out-Null
             Copy-Item -Path $srcThumbdrive -Destination $dstFolder -Recurse -Force
+            $thumbdriveRoot = Join-Path $dstFolder 'Thumbdrive'
+            if (Test-Path $thumbdriveRoot) {
+                $debugTargets += $thumbdriveRoot
+            }
             Write-Host "Completed!" -ForegroundColor Green
             Write-Host ""
             # Copy DesktopScripts
@@ -243,6 +308,7 @@ switch ($mainSelection) {
             if (Test-Path $srcDesktopScripts) {
                 if (Test-Path $dstDesktopScripts) { Remove-Item -Path $dstDesktopScripts -Recurse -Force }
                 Copy-Item -Path $srcDesktopScripts -Destination $dstPrebuilt -Recurse -Force
+                if (Test-Path $dstDesktopScripts) { $debugTargets += $dstDesktopScripts }
             }
             # Copy firmware
             $srcFirmware = Join-Path (Join-Path $prebuiltPath $numFolder) 'firmware'
@@ -267,7 +333,28 @@ switch ($mainSelection) {
             }
         }
 
+        if ($debugTargets.Count -gt 0) {
+            $printed = $false
+            $updated = $false
+            foreach ($targetPath in $debugTargets) {
+                $params = @{
+                    DesktopScriptsPath    = $targetPath
+                    EnableDebug           = $enable_debugMode
+                    SkipCompletionMessage = $true
+                }
+                if ($printed) { $params.SuppressMessages = $true }
+                if (Set-DebugModeInTotalUpdate @params) {
+                    $updated = $true
+                    if (-not $printed) { $printed = $true }
+                }
+            }
+            if ($updated) {
+                Write-Host "Completed!" -ForegroundColor Green
+            }
+        }
+
         # Copy ADK files (DISM & BCDBoot)
+		Write-Host ""
         Write-Host "Copying ADK files to Thumbdrive..." -ForegroundColor Cyan
         $adkDism = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Dism\Dism.exe"
         $adkDismFolder = Split-Path $adkDism -Parent
@@ -759,6 +846,30 @@ switch ($mainSelection) {
                                 Set-Content -Path $thumbTxt2 -Value $newLines -Encoding Default
                             }
                         } catch {}
+                        
+                        # 同步刪除 $remove_driver 中指定的 driver 目錄（從複製過來的資料夾中）
+                        if ($hasRemoveDrivers) {
+                            # 取得目標 BSP driver 資料夾路徑
+                            $targetBspDriver = Join-Path $dstPrebuilt $BSP_driver
+                            if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+                                $targetBspDriver = Join-Path $dstPrebuilt 'regrouped_driver'
+                            }
+                            if (Test-Path $targetBspDriver) {
+                                foreach ($driverName in $remove_driver) {
+                                    $driverDir = Join-Path $targetBspDriver $driverName
+                                    if (Test-Path $driverDir) {
+                                        try {
+                                            Remove-Item -Path $driverDir -Recurse -Force
+                                            Write-Host "Removed driver directory: " -NoNewline
+											Write-Host "$driverName" -ForegroundColor Yellow
+                                        } catch {
+                                            Write-Host "Failed to remove driver directory: $driverName - $_" -ForegroundColor Red
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                         Write-Host "Completed!" -ForegroundColor Green
                     } catch {
                         Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
@@ -771,6 +882,7 @@ switch ($mainSelection) {
 
 
         # Mount winpe.wim 
+		Write-Host ""
         Write-Host "Mounting WinPE...." -ForegroundColor Cyan
         # Get the absolute path of winpe.wim 
         $thumbdriveSources = Join-Path $dstFolder 'Thumbdrive/sources'
@@ -1288,6 +1400,26 @@ switch ($mainSelection) {
                                 Set-Content -Path $thumbTxt3 -Value $newLines -Encoding Default
                             }
                         } catch {}
+                        
+                        # 同步刪除 $remove_driver 中指定的 driver 目錄（從複製過來的資料夾中）
+                        if ($hasRemoveDrivers) {
+                            # 使用功能 3 中已定義的 $dstBspDriver 路徑
+                            if (Test-Path $dstBspDriver) {
+                                foreach ($driverName in $remove_driver) {
+                                    $driverDir = Join-Path $dstBspDriver $driverName
+                                    if (Test-Path $driverDir) {
+                                        try {
+                                            Remove-Item -Path $driverDir -Recurse -Force
+                                            Write-Host "Removed driver directory: " -NoNewline
+											Write-Host "$driverName" -ForegroundColor Yellow
+                                        } catch {
+                                            Write-Host "Failed to remove driver directory: $driverName - $_" -ForegroundColor Red
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                         Write-Host "Completed!" -ForegroundColor Green
                     } catch {
                         Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
