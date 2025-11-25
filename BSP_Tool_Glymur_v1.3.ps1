@@ -1,6 +1,6 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.3
-$_changedate = 11/12/2025
+$_changedate = 11/25/2025
 
 
 # User-defined settings
@@ -31,7 +31,7 @@ $bspToIsoMapping = @{
 	'r03900_x2' = '27965'
 	'r04000' = '27965'
 	'r04000_x1' = '27965'
-    'r04100' = ''
+    'r04100' = '28000' # release note: 27975
 	'r04300' = ''
 	'r04500' = ''
 }
@@ -970,17 +970,17 @@ switch ($mainSelection) {
             $bcdPath = Join-Path $dstFolder 'Thumbdrive/efi/microsoft/boot/bcd'
             $bcdFullPath = (Resolve-Path $bcdPath).Path
             $bcdCmds = @(
-                @("/store", $bcdFullPath, "/ENUM", "ALL"),
-                @("/store", $bcdFullPath, "/set", "{default}", "osdevice", "ramdisk=[boot]\sources\winpe.wim,{7619dcc8-fafe-11d9-b411-000476eba25f}"),
-                @("/store", $bcdFullPath, "/set", "{default}", "device", "ramdisk=[boot]\sources\winpe.wim,{7619dcc8-fafe-11d9-b411-000476eba25f}"),
-                @("/store", $bcdFullPath, "/ENUM", "ALL")
+                "bcdedit /store `"$bcdFullPath`" /ENUM ALL",
+                "bcdedit /store `"$bcdFullPath`" /set {default} osdevice ramdisk=[boot]\sources\winpe.wim,{7619dcc8-fafe-11d9-b411-000476eba25f}",
+                "bcdedit /store `"$bcdFullPath`" /set {default} device ramdisk=[boot]\sources\winpe.wim,{7619dcc8-fafe-11d9-b411-000476eba25f}",
+                "bcdedit /store `"$bcdFullPath`" /ENUM ALL"
             )
             $success = $true
             for ($i = 0; $i -lt $bcdCmds.Count; $i++) {
-                $bcdargs = $bcdCmds[$i]
-                $output = & bcdedit @bcdargs | Out-String
+                $bcdCmd = $bcdCmds[$i]
+                $output = cmd /c $bcdCmd 2>&1 | Out-String
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Host "Failed: bcdedit $($bcdargs -join ' ')" -ForegroundColor Red
+                    Write-Host "Failed: $bcdCmd" -ForegroundColor Red
                     $success = $false
                     break
                 }
