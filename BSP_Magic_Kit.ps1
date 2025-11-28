@@ -1,6 +1,6 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
 $_version = 1.3
-$_changedate = 11/25/2025
+$_changedate = 11/28/2025
 
 
 # User-defined settings
@@ -32,7 +32,7 @@ $bspToIsoMapping = @{
 	'r04000' = '27965'
 	'r04000_x1' = '27965'
     'r04100' = '28000' # release note: 27975
-	'r04300' = ''
+	'r04300' = '28000'
 	'r04500' = ''
 }
 
@@ -133,6 +133,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 # Main menu
+Write-Host ""
+Write-Host "** BSP Magic Kit v$_version **" 
 Write-Host "=========================="
 Write-Host "1) Download BSP package"
 Write-Host "2) Create USB installer"
@@ -248,7 +250,8 @@ switch ($mainSelection) {
         $debugTargets = @()
         if (Test-Path $dstFolder) {
             do {
-                $overwrite = Read-Host "Thumbdrive folder already exists, overwrite? (y/n)"
+				Write-Host "Thumbdrive folder already exists, overwrite? (y/n)" -ForegroundColor Red -NoNewline
+                $overwrite = Read-Host " "
             } until ($overwrite -eq 'y' -or $overwrite -eq 'Y' -or $overwrite -eq 'n' -or $overwrite -eq 'N')
             if ($overwrite -eq 'n' -or $overwrite -eq 'N') {
                 Write-Host "Skip copying BSP package files" -ForegroundColor Yellow
@@ -1085,15 +1088,17 @@ switch ($mainSelection) {
             # Modifying installwoa.cmd
             Write-Host ""
             Write-Host "Modifying installwoa.cmd..." -ForegroundColor Cyan
-            $installwoaPath = Join-Path $thumbdriveDst 'installwoa.cmd'
-            if (!(Test-Path $installwoaPath)) {
-                Write-Host "installwoa.cmd not found in $thumbdriveDst" -ForegroundColor Red
-                Write-Host ""
-                Read-Host "Press Enter to exit..."
-                return
-            } else {
+            # Function to modify installwoa.cmd
+            function Update-InstallwoaCmd {
+                param([string]$InstallwoaPath, [string]$LocationName)
+                
+                if (!(Test-Path $InstallwoaPath)) {
+                    Write-Host "  installwoa.cmd not found in $LocationName" -ForegroundColor Yellow
+                    return $false
+                }
+                
                 try {
-                    $content = Get-Content $installwoaPath -Raw -Encoding Default
+                    $content = Get-Content $InstallwoaPath -Raw -Encoding Default
                     $lines = $content -split "`r`n"
                     $newLines = @()
                     $found = $false
@@ -1123,20 +1128,64 @@ switch ($mainSelection) {
                     }
 
                     if ($found) {
-                        Set-Content -Path $installwoaPath -Value ($newLines -join "`r`n") -Encoding Default
-                         # Reload installwoa.cmd and confirm
-                        $verifyContent = Get-Content $installwoaPath -Raw -Encoding Default
+                        Set-Content -Path $InstallwoaPath -Value ($newLines -join "`r`n") -Encoding Default
+                        # Reload installwoa.cmd and confirm
+                        $verifyContent = Get-Content $InstallwoaPath -Raw -Encoding Default
                         if ($verifyContent -match "set deviceModel=CRD") {
-                            Write-Host "Completed!" -ForegroundColor Green
+                            return $true
                         } else {
-                            Write-Host "Modification failed or not verified!" -ForegroundColor Red
+                            Write-Host "  Modification failed or not verified in $LocationName" -ForegroundColor Red
+                            return $false
                         }
                     } else {
-                        Write-Host "Target block not found in installwoa.cmd" -ForegroundColor Red
+                        Write-Host "  Target block not found in installwoa.cmd ($LocationName)" -ForegroundColor Yellow
+                        return $false
                     }
                 } catch {
-                    Write-Host ("Failed to modify installwoa.cmd: " + $PSItem) -ForegroundColor Red
+                    Write-Host "  Failed to modify installwoa.cmd in $LocationName : $PSItem" -ForegroundColor Red
+                    return $false
                 }
+            }
+            
+            # Modify installwoa.cmd in Thumbdrive
+            $thumbdriveInstallwoaPath = Join-Path $thumbdriveDst 'installwoa.cmd'
+            $thumbdriveModified = Update-InstallwoaCmd -InstallwoaPath $thumbdriveInstallwoaPath -LocationName "Thumbdrive"
+            
+            # Modify installwoa.cmd in DesktopScripts
+            $desktopScriptsInstallwoaPath = Join-Path $dstPrebuilt 'DesktopScripts\installwoa.cmd'
+            $desktopScriptsModified = Update-InstallwoaCmd -InstallwoaPath $desktopScriptsInstallwoaPath -LocationName "DesktopScripts"
+            
+            # Check if both files were modified successfully
+            $thumbdriveExists = Test-Path $thumbdriveInstallwoaPath
+            $desktopScriptsExists = Test-Path $desktopScriptsInstallwoaPath
+            
+            if (-not $thumbdriveExists -and -not $desktopScriptsExists) {
+                Write-Host "installwoa.cmd not found in both Thumbdrive and DesktopScripts" -ForegroundColor Red
+                Write-Host ""
+                Read-Host "Press Enter to exit..."
+                return
+            } elseif ($thumbdriveModified -and $desktopScriptsModified) {
+                Write-Host "Completed!" -ForegroundColor Green
+            } else {
+                # At least one file failed to modify
+                $errorMsg = "Failed to modify installwoa.cmd:"
+                if ($thumbdriveExists -and -not $thumbdriveModified) {
+                    $errorMsg += " Thumbdrive"
+                }
+                if ($desktopScriptsExists -and -not $desktopScriptsModified) {
+                    if ($errorMsg -ne "Failed to modify installwoa.cmd:") { $errorMsg += "," }
+                    $errorMsg += " DesktopScripts"
+                }
+                if (-not $thumbdriveExists) {
+                    $errorMsg += " (Thumbdrive file not found)"
+                }
+                if (-not $desktopScriptsExists) {
+                    $errorMsg += " (DesktopScripts file not found)"
+                }
+                Write-Host $errorMsg -ForegroundColor Red
+                Write-Host ""
+                Read-Host "Press Enter to exit..."
+                return
             }
 
             # All done
