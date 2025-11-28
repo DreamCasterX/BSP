@@ -15,6 +15,7 @@ $enable_debugMode = $false
 $new_driver = "Updated_driver"
 $iso_folder = "ISO"
 $fuse_folder = "FUSE"
+$cva_file = "CVA_info_BSP.txt"
 
 # BSP to ISO mapping
 $bspToIsoMapping = @{
@@ -123,6 +124,39 @@ function Set-DebugModeInTotalUpdate {
     return $success
 }
 
+# Function to safely write file content
+function Add-ContentSafely {
+    param($FilePath, $Content, $Description = "")
+    
+    try {
+        $Content | Add-Content -Path $FilePath -Encoding UTF8
+    } catch {
+        if ($Description) {
+            Write-Host "Write fail $Description : $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+}
+
+# Function to check specific title in the file content
+function Test-SectionExists {
+    param($FilePath, $SectionTitle)
+    
+    if (-not (Test-Path $FilePath)) {
+        return $false
+    }
+    
+    try {
+        $result = Select-String -Path $FilePath -Pattern [regex]::Escape($SectionTitle) -SimpleMatch
+        return $null -ne $result
+    } catch {
+        $content = Get-Content $FilePath -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            return $content -like "*$SectionTitle*"
+        }
+        return $false
+    }
+}
+
         
 # Check if run as admin
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -134,7 +168,9 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 # Main menu
 Write-Host ""
-Write-Host "** BSP Magic Kit v$_version **" 
+Write-Host "** BSP Magic Kit " -NoNewline
+Write-Host "v$_version" -ForegroundColor 'DarkYellow' -NoNewline
+Write-Host " **"
 Write-Host "=========================="
 Write-Host "1) Download BSP package"
 Write-Host "2) Create USB installer"
@@ -142,12 +178,13 @@ Write-Host "3) Update drivers (non-WinPE)"
 Write-Host "4) Display driver info"    
 Write-Host "5) Copy thumbdrive to USB" 
 Write-Host "6) Make version.exe"
-Write-Host "7) Inspect secure sign"
+Write-Host "7) Get BSP CVA info"
+Write-Host "8) Inspect secure sign"
 Write-Host "=========================="
 
 do {
     $mainSelection = Read-Host "Select a function"
-} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5' -or $mainSelection -eq '6' -or $mainSelection -eq '7')
+} until ($mainSelection -eq '1' -or $mainSelection -eq '2' -or $mainSelection -eq '3' -or $mainSelection -eq '4' -or $mainSelection -eq '5' -or $mainSelection -eq '6' -or $mainSelection -eq '7' -or $mainSelection -eq '8')
 
 switch ($mainSelection) {
     '1' {
@@ -1547,6 +1584,7 @@ switch ($mainSelection) {
         $driverItems = Get-ChildItem -Path $driverDir
         if ($driverItems.Count -eq 0) {
             Write-Host "No driver found in $new_driver!" -ForegroundColor Red
+			Write-Host ""
             return
         }
         # Check INF files
@@ -1822,7 +1860,94 @@ static void Main(string[] args)
             Write-Host "Version.cs file not found" -ForegroundColor Red
         }
     }
+    
     '7' {
+        # Get CVA info
+        Write-Host ""
+        Write-Host "Getting BSP detail CVA info..." -ForegroundColor Cyan
+        
+        # Common settings
+        $CVA_OS = "W11A"
+        $CVA_filePath = Join-Path -Path $PWD -ChildPath "$cva_file"
+        $exeFilePath = ".\Version.exe"
+        
+        # Create CVA_info file if not exists
+        if (-not (Test-Path $CVA_filePath)) {
+            New-Item -Path $CVA_filePath -ItemType File -Force | Out-Null
+        }
+        
+        # Check Version.exe info
+        if (Test-Path $exeFilePath) {
+            try {
+                $exeItem = Get-Item $exeFilePath
+                # More robust version retrieval
+                $exeVersionString = $null
+                try {
+                    $exeVersionString = $exeItem.VersionInfo.FileVersion
+                } catch {}
+                if (-not $exeVersionString) {
+                    try {
+                        $verInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exeFilePath))
+                        $exeVersionString = $verInfo.FileVersion
+                    } catch {}
+                }
+
+                # Convert version to hex: extract numeric parts, pad to 4 with zeros
+                $exeHexVersion = "N/A"
+                if ($exeVersionString) {
+                    $exeVersionParts = @([regex]::Matches($exeVersionString, '\d+')) | ForEach-Object { $_.Value }
+                    while ($exeVersionParts.Count -lt 4) { $exeVersionParts += '0' }
+                    $exeVersionParts = $exeVersionParts[0..3]
+                    $exeHexVersion = "0x{0:X4},0x{1:X4},0x{2:X4},0x{3:X4}" -f [int]$exeVersionParts[0], [int]$exeVersionParts[1], [int]$exeVersionParts[2], [int]$exeVersionParts[3]
+                }
+
+                # Display the captured information header (BSP)
+                $BSP_sub = "`n==== BSP CVA Information ===="
+                Write-Host $BSP_sub
+                Write-Host "File Version: " -NoNewline
+                Write-Host "$exeVersionString" -ForegroundColor 'Blue'
+
+                # Signature info (can be slow on some systems due to revocation checks)
+                try {
+                    $sig = Get-AuthenticodeSignature -FilePath $exeFilePath
+                    if ($sig) {
+                        $signer = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { "Unknown signer" }
+                        $status = $sig.Status
+                        $color = if ($status -eq 'Valid') { 'Blue' } else { 'Red' }
+                        Write-Host "Signature: " -NoNewline
+                        Write-Host "$status - $signer" -ForegroundColor $color
+                    } else {
+                        Write-Host "Signature: Not available" -ForegroundColor 'Yellow'
+                    }
+                } catch {
+                    Write-Host "Signature: Skipped (error during signature check)" -ForegroundColor Yellow
+                }
+
+                # Display and persist the formatted line
+                $exe_info = "Version.exe=<DRIVERS>,$exeHexVersion,$CVA_OS"
+                Write-Host "Detail info: " -NoNewline
+				Write-Host $exe_info -BackgroundColor 'Blue'
+
+                # Check if CVA_info.txt has specific string
+                $hasBSPInfo = Test-SectionExists $CVA_filePath "BSP CVA Information"
+                if (-not $hasBSPInfo) {
+                    Add-ContentSafely $CVA_filePath $BSP_sub "BSP Header"
+                    Add-ContentSafely $CVA_filePath $exe_info "Version.exe Info"
+                }
+
+            } catch {
+                Write-Host "Failed to read Version.exe details." -ForegroundColor 'Red'
+            }
+        } else {
+            Write-Host "Version.exe not found in the current directory!" -ForegroundColor 'Red'
+			Write-Host ""
+			return
+        }
+        Write-Host ""
+        Write-Host "Completed!" -ForegroundColor Green
+        Write-Host ""
+    }
+	'8' {
         # Validate secure sign
         Write-Host "" 
         Write-Host "Inspecting secure sign..." -ForegroundColor Cyan
