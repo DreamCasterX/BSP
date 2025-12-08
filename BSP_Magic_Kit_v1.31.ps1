@@ -4,7 +4,7 @@ $_changedate = 12/8/2025
 
 
 # User-defined settings
-$thumbdrive = "Cashmere_r4300_x1_nonATT"
+$thumbdrive = "Cashmere_r4300_ATT"
 
 
 # PATH settings
@@ -321,6 +321,7 @@ switch ($mainSelection) {
                 }
                 # Copy $BSP_driver
                 $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
+                $usedAltDriver = $false
                 if (-not (Test-Path $srcDriver)) {
                     if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
                         Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
@@ -332,6 +333,7 @@ switch ($mainSelection) {
                             } until ($useAlt -eq 'y' -or $useAlt -eq 'Y' -or $useAlt -eq 'n' -or $useAlt -eq 'N')
                             if ($useAlt -eq 'y' -or $useAlt -eq 'Y') {
                                 $srcDriver = $altSrcDriver
+                                $usedAltDriver = $true
                             } else {
                                 Write-Host "Copy cancelled" -ForegroundColor Yellow
                                 Write-Host ""
@@ -357,12 +359,14 @@ switch ($mainSelection) {
                         if (Test-Path $dstDriver) { Remove-Item -Path $dstDriver -Recurse -Force }
                         New-Item -Path $dstDriver -ItemType Directory -Force | Out-Null
                         Copy-Item -Path (Join-Path $srcDriver '*') -Destination $dstDriver -Recurse -Force
-						Write-Host "Completed!" -ForegroundColor Green
-						Write-Host ""
                     } else {
                         $dstOtherDriver = Join-Path $dstPrebuilt $BSP_driver
                         if (Test-Path $dstOtherDriver) { Remove-Item -Path $dstOtherDriver -Recurse -Force }
                         Copy-Item -Path $srcDriver -Destination $dstPrebuilt -Recurse -Force
+                    }
+                    if ($usedAltDriver) {
+                        Write-Host "Completed!" -ForegroundColor Green
+                        Write-Host ""
                     }
                 }
             }
@@ -392,6 +396,7 @@ switch ($mainSelection) {
             }
             # Copy $BSP_driver
             $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
+            $usedAltDriver = $false
             if (-not (Test-Path $srcDriver)) {
                 if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
                     Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
@@ -403,6 +408,7 @@ switch ($mainSelection) {
                         } until ($useAlt -eq 'y' -or $useAlt -eq 'Y' -or $useAlt -eq 'n' -or $useAlt -eq 'N')
                         if ($useAlt -eq 'y' -or $useAlt -eq 'Y') {
                             $srcDriver = $altSrcDriver
+                            $usedAltDriver = $true
                         } else {
                             Write-Host "Copy cancelled" -ForegroundColor Yellow
                             Write-Host ""
@@ -428,12 +434,14 @@ switch ($mainSelection) {
                     if (Test-Path $dstDriver) { Remove-Item -Path $dstDriver -Recurse -Force }
                     New-Item -Path $dstDriver -ItemType Directory -Force | Out-Null
                     Copy-Item -Path (Join-Path $srcDriver '*') -Destination $dstDriver -Recurse -Force
-					Write-Host "Completed!" -ForegroundColor Green
-					Write-Host ""
                 } else {
                     $dstOtherDriver = Join-Path $dstPrebuilt $BSP_driver
                     if (Test-Path $dstOtherDriver) { Remove-Item -Path $dstOtherDriver -Recurse -Force }
                     Copy-Item -Path $srcDriver -Destination $dstPrebuilt -Recurse -Force
+                }
+                if ($usedAltDriver) {
+                    Write-Host "Completed!" -ForegroundColor Green
+                    Write-Host ""
                 }
             }
         }
