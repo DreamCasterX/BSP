@@ -1,10 +1,10 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.3
-$_changedate = 11/28/2025
+$_version = 1.31
+$_changedate = 12/8/2025
 
 
 # User-defined settings
-$thumbdrive = "TEST"
+$thumbdrive = "Cashmere_r4300_x1_nonATT"
 
 
 # PATH settings
@@ -34,6 +34,7 @@ $bspToIsoMapping = @{
 	'r04000_x1' = '27965'
     'r04100' = '28000' # release note: 27975
 	'r04300' = '28000'
+	'r04300_x1' = '28000'
 	'r04500' = ''
 }
 
@@ -320,12 +321,44 @@ switch ($mainSelection) {
                 }
                 # Copy $BSP_driver
                 $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
+                if (-not (Test-Path $srcDriver)) {
+                    if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+                        Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
+                        $altSrcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) 'regrouped_driver'
+                        if (Test-Path $altSrcDriver) {
+                            do {
+								Write-Host "Use 'regrouped_driver' instead? (y/n)" -NoNewline
+                                $useAlt = Read-Host " "
+                            } until ($useAlt -eq 'y' -or $useAlt -eq 'Y' -or $useAlt -eq 'n' -or $useAlt -eq 'N')
+                            if ($useAlt -eq 'y' -or $useAlt -eq 'Y') {
+                                $srcDriver = $altSrcDriver
+                            } else {
+                                Write-Host "Copy cancelled" -ForegroundColor Yellow
+                                Write-Host ""
+                                Read-Host "Press Enter to exit..."
+                                return
+                            }
+                        } else {
+                            Write-Host "Alternative source folder 'regrouped_driver' also not found: $altSrcDriver" -ForegroundColor Red
+                            Write-Host ""
+                            Read-Host "Press Enter to exit..."
+                            return
+                        }
+                    } else {
+                        Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
+                        Write-Host ""
+                        Read-Host "Press Enter to exit..."
+                        return
+                    }
+                }
                 if (Test-Path $srcDriver) {
                     $dstDriver = Join-Path $dstPrebuilt 'regrouped_driver'
                     if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
                         if (Test-Path $dstDriver) { Remove-Item -Path $dstDriver -Recurse -Force }
                         New-Item -Path $dstDriver -ItemType Directory -Force | Out-Null
                         Copy-Item -Path (Join-Path $srcDriver '*') -Destination $dstDriver -Recurse -Force
+						Write-Host "Completed!" -ForegroundColor Green
+						Write-Host ""
                     } else {
                         $dstOtherDriver = Join-Path $dstPrebuilt $BSP_driver
                         if (Test-Path $dstOtherDriver) { Remove-Item -Path $dstOtherDriver -Recurse -Force }
@@ -359,12 +392,44 @@ switch ($mainSelection) {
             }
             # Copy $BSP_driver
             $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
+            if (-not (Test-Path $srcDriver)) {
+                if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+                    Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
+                    $altSrcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) 'regrouped_driver'
+                    if (Test-Path $altSrcDriver) {
+                        do {
+                            Write-Host "Use 'regrouped_driver' instead? (y/n)" -NoNewline
+                            $useAlt = Read-Host " "
+                        } until ($useAlt -eq 'y' -or $useAlt -eq 'Y' -or $useAlt -eq 'n' -or $useAlt -eq 'N')
+                        if ($useAlt -eq 'y' -or $useAlt -eq 'Y') {
+                            $srcDriver = $altSrcDriver
+                        } else {
+                            Write-Host "Copy cancelled" -ForegroundColor Yellow
+                            Write-Host ""
+                            Read-Host "Press Enter to exit..."
+                            return
+                        }
+                    } else {
+                        Write-Host "Alternative source folder 'regrouped_driver' also not found: $altSrcDriver" -ForegroundColor Red
+                        Write-Host ""
+                        Read-Host "Press Enter to exit..."
+                        return
+                    }
+                } else {
+                    Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
+                    Write-Host ""
+                    Read-Host "Press Enter to exit..."
+                    return
+                }
+            }
             if (Test-Path $srcDriver) {
                 $dstDriver = Join-Path $dstPrebuilt 'regrouped_driver'
                 if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
                     if (Test-Path $dstDriver) { Remove-Item -Path $dstDriver -Recurse -Force }
                     New-Item -Path $dstDriver -ItemType Directory -Force | Out-Null
                     Copy-Item -Path (Join-Path $srcDriver '*') -Destination $dstDriver -Recurse -Force
+					Write-Host "Completed!" -ForegroundColor Green
+					Write-Host ""
                 } else {
                     $dstOtherDriver = Join-Path $dstPrebuilt $BSP_driver
                     if (Test-Path $dstOtherDriver) { Remove-Item -Path $dstOtherDriver -Recurse -Force }
