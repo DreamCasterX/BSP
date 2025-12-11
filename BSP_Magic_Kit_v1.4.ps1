@@ -1,10 +1,10 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.31
-$_changedate = 12/8/2025
+$_version = 1.4
+$_changedate = 12/10/2025
 
 
 # User-defined settings
-$thumbdrive = "Cashmere_r4300_ATT"
+$thumbdrive = "TEST"
 
 
 # PATH settings
@@ -35,22 +35,43 @@ $bspToIsoMapping = @{
     'r04100' = '28000' # release note: 27975
 	'r04300' = '28000'
 	'r04300_x1' = '28000'
+	'r04400' = '28000'
 	'r04500' = ''
 }
 
-# Specific driver settings for Installer (CashmereQ only)
-$remove_driver = @(
-    "qcSensorsConfig$product_id",
-    "Qccamtelesensor$product_id",
-    "Qccamultrawidesensor$product_id",
-    "qccamultrawidesensor_extension$product_id",
-    "qccamtelesensor_extension$product_id",
-    "qccamrearsensor_extension$product_id",
-    "qccamrearsensor$product_id",
-    "qcAlwaysOnSensing"
-)
-$add_driver = @(
-    "qccamflash_ext$product_id"  # Added to the later of qccamflash$product_id
+# Specific driver settings for Installer
+$driverConfigs = @(
+    @{
+        name = "CashmereQ"
+        remove_driver = @(
+            "qcSensorsConfig$product_id",
+            "Qccamtelesensor$product_id",
+            "Qccamultrawidesensor$product_id",
+            "qccamultrawidesensor_extension$product_id",
+            "qccamtelesensor_extension$product_id",
+            "qccamrearsensor_extension$product_id",
+            "qccamrearsensor$product_id",
+            "qcAlwaysOnSensing",
+			"qccamjpege_ffu$product_id",
+            "qcdxext_cdps$product_id",
+            "qcdxext_idp$product_id",
+            "qcdxext_idps$product_id",
+            "qcdxext_qcb$product_id"
+        )
+        add_driver = @(
+            "qccamflash_ext$product_id"  # Added to the later of qccamflash$product_id
+        )
+    },
+    @{
+        name = "Dolcelatte"
+        remove_driver = @(
+            "qcdxext_cdps$product_id",
+            "qcdxext_idp$product_id",
+            "qcdxext_idps$product_id",
+            "qcdxext_qcb$product_id"
+        )
+        add_driver = @()
+    }
 )
 $driverCheckList = @(
     @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
@@ -154,6 +175,103 @@ function Test-SectionExists {
         if ($content) {
             return $content -like "*$SectionTitle*"
         }
+        return $false
+    }
+}
+
+# Function to modify preloaded drivers
+function Modify-PreloadedDrivers {
+    param(
+        [string]$DriversTxtPath,
+        [string]$ThumbdriveDst,
+        [string]$TargetBspDriver,
+        [array]$RemoveDrivers,
+        [array]$AddDrivers,
+        [string]$ProductId
+    )
+    
+    if (-not (Test-Path $DriversTxtPath)) {
+        return $false
+    }
+    
+    $hasAddDrivers = $AddDrivers.Count -gt 0
+    $hasRemoveDrivers = $RemoveDrivers.Count -gt 0
+    
+    if (-not $hasAddDrivers -and -not $hasRemoveDrivers) {
+        Write-Host "No drivers to add or remove. Skipping driver modification." -ForegroundColor Yellow
+        return $false
+    }
+    
+    Write-Host "Add list:"
+    if ($hasAddDrivers) {
+        $AddDrivers | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+    } else {
+        Write-Host "  N/A" -ForegroundColor Gray
+    }
+    Write-Host "Remove list:"
+    if ($hasRemoveDrivers) {
+        $RemoveDrivers | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
+    } else {
+        Write-Host "  N/A" -ForegroundColor Gray
+    }
+    
+    do {
+        $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
+        $removeAnsLow = $removeAns.ToLower()
+    } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
+    
+    if ($removeAnsLow -eq 'n') {
+        Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
+        return $false
+    }
+    
+    try {
+        $driversLines = Get-Content $DriversTxtPath -Encoding Default
+        $newLines = @()
+        foreach ($line in $driversLines) {
+            $trimmedLine = $line.Trim()
+            if ($hasRemoveDrivers -and $RemoveDrivers -contains $trimmedLine) {
+                continue # Skip this line
+            }
+            $newLines += $line # Add the current line
+            if ($trimmedLine -eq "qccamflash$ProductId" -and $hasAddDrivers) {
+                $newLines += $AddDrivers # Add new drivers after the anchor
+            }
+        }
+        Set-Content -Path $DriversTxtPath -Value $newLines -Encoding Default
+        
+        # 同步到 Thumbdrive\drivers.txt（若存在）
+        if ($ThumbdriveDst) {
+            try {
+                $thumbTxt = Join-Path $ThumbdriveDst 'drivers.txt'
+                if (Test-Path $thumbTxt) {
+                    Set-Content -Path $thumbTxt -Value $newLines -Encoding Default
+                }
+            } catch {}
+        }
+        
+        # 同步刪除 $RemoveDrivers 中指定的 driver 目錄（從複製過來的資料夾中）
+        if ($hasRemoveDrivers -and $TargetBspDriver) {
+            if (Test-Path $TargetBspDriver) {
+                foreach ($driverName in $RemoveDrivers) {
+                    $driverDir = Join-Path $TargetBspDriver $driverName
+                    if (Test-Path $driverDir) {
+                        try {
+                            Remove-Item -Path $driverDir -Recurse -Force
+                            Write-Host "Removed driver directory: " -NoNewline
+                            Write-Host "$driverName" -ForegroundColor Yellow
+                        } catch {
+                            Write-Host "Failed to remove driver directory: $driverName - $_" -ForegroundColor Red
+                        }
+                    }
+                }
+            }
+        }
+        
+        Write-Host "Completed!" -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
         return $false
     }
 }
@@ -914,82 +1032,43 @@ switch ($mainSelection) {
         $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
         $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
         if (Test-Path $driversTxtPath) {
-            # Check if there are any drivers to add or remove
-            $hasAddDrivers = $add_driver.Count -gt 0
-            $hasRemoveDrivers = $remove_driver.Count -gt 0
+            # Ask if user wants to modify pre-loaded drivers
+            do {
+                $modifyPreloaded = Read-Host "Modify pre-loaded driver? (y/n)"
+                $modifyPreloadedLow = $modifyPreloaded.ToLower()
+            } until ($modifyPreloadedLow -eq 'y' -or $modifyPreloadedLow -eq 'n')
             
-            if (-not $hasAddDrivers -and -not $hasRemoveDrivers) {
-                Write-Host "No drivers to add or remove. Skipping driver modification." -ForegroundColor Yellow
+            if ($modifyPreloadedLow -eq 'n') {
+                Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
             } else {
-                Write-Host "Add list:"
-                if ($hasAddDrivers) {
-                    $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-                } else {
-                    Write-Host "  N/A" -ForegroundColor Gray
+                # Display available driver configuration groups
+                Write-Host ""
+                Write-Host "Available driver config groups:"
+                $maxIndexLen = ($driverConfigs.Count).ToString().Length
+                for ($i = 0; $i -lt $driverConfigs.Count; $i++) {
+                    $num = ($i+1).ToString().PadLeft($maxIndexLen)
+                    Write-Host ("{0}) {1}" -f $num, $driverConfigs[$i].name)
                 }
-                Write-Host "Remove list:"
-                if ($hasRemoveDrivers) {
-                    $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-                } else {
-                    Write-Host "  N/A" -ForegroundColor Gray
+                
+                # Let user select a configuration group
+				do {
+					$configSelection = Read-Host "Enter the number"
+					$valid = $configSelection -match '^\d+$' -and [int]$configSelection -ge 1 -and [int]$configSelection -le $driverConfigs.Count
+				} until ($valid)
+                
+                $selectedConfig = $driverConfigs[$configSelection - 1]
+                Write-Host "Selected configuration: " -NoNewline
+                Write-Host "$($selectedConfig.name)" -ForegroundColor Yellow
+                Write-Host ""
+                
+                # Get target BSP driver folder path
+                $targetBspDriver = Join-Path $dstPrebuilt $BSP_driver
+                if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+                    $targetBspDriver = Join-Path $dstPrebuilt 'regrouped_driver'
                 }
-                do {
-                    $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
-                    $removeAnsLow = $removeAns.ToLower()
-                } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
-                if ($removeAnsLow -eq 'y') {
-                    try {
-                        $driversLines = Get-Content $driversTxtPath -Encoding Default
-                        $newLines = @()
-                        foreach ($line in $driversLines) {
-                            $trimmedLine = $line.Trim()
-                            if ($hasRemoveDrivers -and $remove_driver -contains $trimmedLine) {
-                                continue # Skip this line
-                            }
-                            $newLines += $line # Add the current line
-                            if ($trimmedLine -eq "qccamflash$product_id" -and $hasAddDrivers) {
-                                $newLines += $add_driver # Add new drivers after the anchor
-                            }
-                        }
-                        Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
-                        # 同步到 Thumbdrive\drivers.txt（若存在）
-                        try {
-                            $thumbTxt2 = Join-Path $thumbdriveDst 'drivers.txt'
-                            if (Test-Path $thumbTxt2) {
-                                Set-Content -Path $thumbTxt2 -Value $newLines -Encoding Default
-                            }
-                        } catch {}
-                        
-                        # 同步刪除 $remove_driver 中指定的 driver 目錄（從複製過來的資料夾中）
-                        if ($hasRemoveDrivers) {
-                            # 取得目標 BSP driver 資料夾路徑
-                            $targetBspDriver = Join-Path $dstPrebuilt $BSP_driver
-                            if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
-                                $targetBspDriver = Join-Path $dstPrebuilt 'regrouped_driver'
-                            }
-                            if (Test-Path $targetBspDriver) {
-                                foreach ($driverName in $remove_driver) {
-                                    $driverDir = Join-Path $targetBspDriver $driverName
-                                    if (Test-Path $driverDir) {
-                                        try {
-                                            Remove-Item -Path $driverDir -Recurse -Force
-                                            Write-Host "Removed driver directory: " -NoNewline
-											Write-Host "$driverName" -ForegroundColor Yellow
-                                        } catch {
-                                            Write-Host "Failed to remove driver directory: $driverName - $_" -ForegroundColor Red
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Write-Host "Completed!" -ForegroundColor Green
-                    } catch {
-                        Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
-                    }
-                } else {
-                    Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
-                }
+                
+                # Call the function to modify drivers
+                Modify-PreloadedDrivers -DriversTxtPath $driversTxtPath -ThumbdriveDst $thumbdriveDst -TargetBspDriver $dstBspDriver -RemoveDrivers $selectedConfig.remove_driver -AddDrivers $selectedConfig.add_driver -ProductId $product_id | Out-Null
             }
         }
 
@@ -1513,79 +1592,40 @@ switch ($mainSelection) {
         $desktopScriptsDir = Join-Path $dstPrebuilt 'DesktopScripts'
         $driversTxtPath = Join-Path $desktopScriptsDir 'drivers.txt'
         if (Test-Path $driversTxtPath) {
-            # Check if there are any drivers to add or remove
-            $hasAddDrivers = $add_driver.Count -gt 0
-            $hasRemoveDrivers = $remove_driver.Count -gt 0
+            # Ask if user wants to modify pre-loaded drivers
+            do {
+                $modifyPreloaded = Read-Host "Modify pre-loaded driver? (y/n)"
+                $modifyPreloadedLow = $modifyPreloaded.ToLower()
+            } until ($modifyPreloadedLow -eq 'y' -or $modifyPreloadedLow -eq 'n')
             
-            if (-not $hasAddDrivers -and -not $hasRemoveDrivers) {
-                Write-Host "No drivers to add or remove. Skipping driver modification." -ForegroundColor Yellow
+            if ($modifyPreloadedLow -eq 'n') {
+                Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
             } else {
-                Write-Host "Add list:" 
-                if ($hasAddDrivers) {
-                    $add_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-                } else {
-                    Write-Host "  N/A" -ForegroundColor Gray
+                # Display available driver configuration groups
+                Write-Host ""
+                Write-Host "Available driver config groups:"
+                $maxIndexLen = ($driverConfigs.Count).ToString().Length
+                for ($i = 0; $i -lt $driverConfigs.Count; $i++) {
+                    $num = ($i+1).ToString().PadLeft($maxIndexLen)
+                    Write-Host ("{0}) {1}" -f $num, $driverConfigs[$i].name)
                 }
-                Write-Host "Remove list:"
-                if ($hasRemoveDrivers) {
-                    $remove_driver | ForEach-Object { Write-Host ("  $_") -ForegroundColor Blue }
-                } else {
-                    Write-Host "  N/A" -ForegroundColor Gray
-                }
-                do {
-                    $removeAns = Read-Host "Modify the above drivers from drivers.txt? (y/n)"
-                    $removeAnsLow = $removeAns.ToLower()
-                } until ($removeAnsLow -eq 'y' -or $removeAnsLow -eq 'n')
-                if ($removeAnsLow -eq 'y') {
-                    try {
-                        $driversLines = Get-Content $driversTxtPath -Encoding Default
-                        $newLines = @()
-                        foreach ($line in $driversLines) {
-                            $trimmedLine = $line.Trim()
-                            if ($hasRemoveDrivers -and $remove_driver -contains $trimmedLine) {
-                                continue # Skip this line
-                            }
-                            $newLines += $line # Add the current line
-                            if ($trimmedLine -eq "qccamflash$product_id" -and $hasAddDrivers) {
-                                $newLines += $add_driver # Add new drivers after the anchor
-                            }
-                        }
-                        Set-Content -Path $driversTxtPath -Value $newLines -Encoding Default
-                        # 同步到 Thumbdrive\drivers.txt（若存在）
-                        try {
-                            $thumbdriveDst = Join-Path (Join-Path $dstPrebuilt 'ISOGEN/emmcdl_method') 'Thumbdrive'
-                            $thumbTxt3 = Join-Path $thumbdriveDst 'drivers.txt'
-                            if (Test-Path $thumbTxt3) {
-                                Set-Content -Path $thumbTxt3 -Value $newLines -Encoding Default
-                            }
-                        } catch {}
-                        
-                        # 同步刪除 $remove_driver 中指定的 driver 目錄（從複製過來的資料夾中）
-                        if ($hasRemoveDrivers) {
-                            # 使用功能 3 中已定義的 $dstBspDriver 路徑
-                            if (Test-Path $dstBspDriver) {
-                                foreach ($driverName in $remove_driver) {
-                                    $driverDir = Join-Path $dstBspDriver $driverName
-                                    if (Test-Path $driverDir) {
-                                        try {
-                                            Remove-Item -Path $driverDir -Recurse -Force
-                                            Write-Host "Removed driver directory: " -NoNewline
-											Write-Host "$driverName" -ForegroundColor Yellow
-                                        } catch {
-                                            Write-Host "Failed to remove driver directory: $driverName - $_" -ForegroundColor Red
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Write-Host "Completed!" -ForegroundColor Green
-                    } catch {
-                        Write-Host "Failed to modify preloaded drivers: $_" -ForegroundColor Red
-                    }
-                } else {
-                    Write-Host "Skip modifying preloaded drivers" -ForegroundColor Yellow
-                }
+                
+                # Let user select a configuration group
+				do {
+					$configSelection = Read-Host "Enter the number"
+					$valid = $configSelection -match '^\d+$' -and [int]$configSelection -ge 1 -and [int]$configSelection -le $driverConfigs.Count
+				} until ($valid)
+				
+                $selectedConfig = $driverConfigs[$configSelection - 1]
+                Write-Host "Selected configuration: " -NoNewline
+                Write-Host "$($selectedConfig.name)" -ForegroundColor Yellow
+                Write-Host ""
+                
+                # Get thumbdrive destination path
+                $thumbdriveDst = Join-Path (Join-Path $dstPrebuilt 'ISOGEN/emmcdl_method') 'Thumbdrive'
+                
+                # Call the function to modify drivers
+                Modify-PreloadedDrivers -DriversTxtPath $driversTxtPath -ThumbdriveDst $thumbdriveDst -TargetBspDriver $dstBspDriver -RemoveDrivers $selectedConfig.remove_driver -AddDrivers $selectedConfig.add_driver -ProductId $product_id | Out-Null
             }
         }
 
