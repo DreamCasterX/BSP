@@ -1,6 +1,6 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.4
-$_changedate = 12/10/2025
+$_version = 1.42
+$_changedate = 12/19/2025
 
 
 # User-defined settings
@@ -9,6 +9,12 @@ $thumbdrive = "TEST"
 
 # PATH settings
 $BSP_driver = "regrouped_driver_ATT_Signed"
+
+# [Options]
+# regrouped_driver_ATT_Signed
+# regrouped_driver
+# ProdSigned
+
 $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
 $enable_debugMode = $false
@@ -36,7 +42,8 @@ $bspToIsoMapping = @{
 	'r04300' = '28000'
 	'r04300_x1' = '28000'
 	'r04400' = '28000'
-	'r04500' = ''
+	'r04400_x1' = '28000'
+	'r04500' = '28000'
 }
 
 # Specific driver settings for Installer
@@ -75,11 +82,13 @@ $driverConfigs = @(
 )
 $driverCheckList = @(
     @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
-	@{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio" },
-	@{ path = "qcadx_ext$product_id/qcadx_ext$product_id.inf"; label = "SVA" },
+	@{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio (APO)" },
+	@{ path = "qcadx_ext$product_id/qcadx_ext$product_id.inf"; label = "Audio (SVA)" },
     @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" },
     @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" },
     @{ path = "qccamisp_ext$product_id/qccamisp_ext$product_id.inf"; label = "Camera (ISP)" },
+	@{ path = "CameraComponent/mep_camera_component.inf"; label = "MEP" },
+	@{ path = "Camera_Optin_WOA/MEPOptInCameraExt.inf"; label = "MEP opt-in" },
 	@{ path = "qcSensors$product_id/qcSensors$product_id.inf"; label = "Sensor" },
     @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
     @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
@@ -179,8 +188,67 @@ function Test-SectionExists {
     }
 }
 
+function Get-DriverSignType {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    if (-not (Test-Path $FilePath)) {
+        return @{ Type = "N/A"; Color = "Red" }
+    }
+
+    try {
+        $sig = Get-AuthenticodeSignature -FilePath $FilePath
+        if (-not $sig) {
+            return @{ Type = "N/A"; Color = "Red" }
+        }
+
+        $status = $sig.Status
+        $signer = $sig.SignerCertificate.Subject
+
+        # Test-signed (first priority)
+        if ($signer -match 'CN=Qualcomm OEM Test Cert 2021 \(TEST ONLY\)') {
+            return @{ Type = "Test signed"; Color = "Red" }
+        }
+
+        # MS WHCP: further distinguish ATT / WHQL via EKU
+        if ($signer -match 'CN=Microsoft Windows Hardware Compatibility Publisher') {
+            $eku = $sig.SignerCertificate.Extensions | Where-Object { $_.Oid.FriendlyName -eq "Enhanced Key Usage" } | Select-Object -First 1
+            $ekuText = ""
+            if ($eku) {
+                $ekuText = ($eku.Format($true) -split "`n" | Select-String -Pattern '\([0-9\.]+\)' | ForEach-Object {
+                    $_.ToString().Trim() -replace '\s*\([0-9\.]+\)\s*$',''
+                }) -join ", "
+            }
+
+            if ($ekuText -like "*Windows Hardware Driver Attested Verification*") {
+                return @{ Type = "ATT-signed"; Color = "Yellow" }
+            }
+            if ($ekuText -like "*Windows Hardware Driver Extended Verification*") {
+                return @{ Type = "WHQL signed"; Color = "Blue" }
+            }
+            if ($ekuText -like "*Lifetime Signing*") {   # EKU = Lifetime Signing, Preview Build Signing, Windows Hardware Driver Verification
+                return @{ Type = "Non-WHQL signed"; Color = "DarkMagenta" }
+            }
+            # Default for WHCP signer but unknown EKU
+            return @{ Type = "Microsoft WHCP (unknown EKU)"; Color = "Yellow" }
+        }
+
+        # Other valid signature
+        if ($status -eq 'Valid' -or $status -eq 'ValidNotTrusted') {
+            return @{ Type = $signer; Color = "Yellow" }
+        }
+
+        # Not valid
+        return @{ Type = $status; Color = "Red" }
+    } catch {
+        return @{ Type = "Error"; Color = "Red" }
+    }
+}
+
 # Function to modify preloaded drivers
-function Modify-PreloadedDrivers {
+function Update-PreloadedDrivers {
     param(
         [string]$DriversTxtPath,
         [string]$ThumbdriveDst,
@@ -396,7 +464,7 @@ switch ($mainSelection) {
         $numFolder = $product_id
         $srcThumbdrive = Join-Path (Join-Path $prebuiltPath $numFolder) 'ISOGEN_QCReference/Thumbdrive'
         if (!(Test-Path $srcThumbdrive)) {
-            Write-Host "Source package not found: $srcThumbdrive" -ForegroundColor Red
+            Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
             Write-Host ""
             Read-Host "Press Enter to exit..."
             return
@@ -440,7 +508,26 @@ switch ($mainSelection) {
                 # Copy $BSP_driver
                 $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
                 $usedAltDriver = $false
-                if (-not (Test-Path $srcDriver)) {
+                $isProdSigned = $false
+                if ($BSP_driver -eq 'ProdSigned') {
+                    # For ProdSigned, check if ProdSigned folder exists
+                    if (-not (Test-Path $srcDriver)) {
+                        Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
+                        Write-Host ""
+                        Read-Host "Press Enter to exit..."
+                        return
+                    }
+                    # Check if ProdSigned\Driver exists
+                    $srcDriverPath = Join-Path $srcDriver 'Driver'
+                    if (-not (Test-Path $srcDriverPath)) {
+                        Write-Host "'$BSP_driver\Driver' source folder not found" -ForegroundColor Red
+                        Write-Host ""
+                        Read-Host "Press Enter to exit..."
+                        return
+                    }
+                    $srcDriver = $srcDriverPath
+                    $isProdSigned = $true
+                } elseif (-not (Test-Path $srcDriver)) {
                     if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
                         Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
                         $altSrcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) 'regrouped_driver'
@@ -473,7 +560,7 @@ switch ($mainSelection) {
                 }
                 if (Test-Path $srcDriver) {
                     $dstDriver = Join-Path $dstPrebuilt 'regrouped_driver'
-                    if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+                    if ($BSP_driver -eq 'regrouped_driver_ATT_Signed' -or $isProdSigned) {
                         if (Test-Path $dstDriver) { Remove-Item -Path $dstDriver -Recurse -Force }
                         New-Item -Path $dstDriver -ItemType Directory -Force | Out-Null
                         Copy-Item -Path (Join-Path $srcDriver '*') -Destination $dstDriver -Recurse -Force
@@ -515,7 +602,26 @@ switch ($mainSelection) {
             # Copy $BSP_driver
             $srcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) $BSP_driver
             $usedAltDriver = $false
-            if (-not (Test-Path $srcDriver)) {
+            $isProdSigned = $false
+            if ($BSP_driver -eq 'ProdSigned') {
+                # For ProdSigned, check if ProdSigned folder exists
+                if (-not (Test-Path $srcDriver)) {
+                    Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
+                    Write-Host ""
+                    Read-Host "Press Enter to exit..."
+                    return
+                }
+                # Check if ProdSigned\Driver exists
+                $srcDriverPath = Join-Path $srcDriver 'Driver'
+                if (-not (Test-Path $srcDriverPath)) {
+                    Write-Host "'$BSP_driver\Driver' source folder not found" -ForegroundColor Red
+                    Write-Host ""
+                    Read-Host "Press Enter to exit..."
+                    return
+                }
+                $srcDriver = $srcDriverPath
+                $isProdSigned = $true
+            } elseif (-not (Test-Path $srcDriver)) {
                 if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
                     Write-Host "'$BSP_driver' source folder not found" -ForegroundColor Red
                     $altSrcDriver = Join-Path (Join-Path $prebuiltPath $numFolder) 'regrouped_driver'
@@ -548,7 +654,7 @@ switch ($mainSelection) {
             }
             if (Test-Path $srcDriver) {
                 $dstDriver = Join-Path $dstPrebuilt 'regrouped_driver'
-                if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+                if ($BSP_driver -eq 'regrouped_driver_ATT_Signed' -or $isProdSigned) {
                     if (Test-Path $dstDriver) { Remove-Item -Path $dstDriver -Recurse -Force }
                     New-Item -Path $dstDriver -ItemType Directory -Force | Out-Null
                     Copy-Item -Path (Join-Path $srcDriver '*') -Destination $dstDriver -Recurse -Force
@@ -868,7 +974,7 @@ switch ($mainSelection) {
 
             # Fetch the BSP driver list
             $dstBspDriver = Join-Path $dstPrebuilt $BSP_driver
-            if ($BSP_driver -eq 'regrouped_driver_ATT_Signed') {
+            if ($BSP_driver -eq 'regrouped_driver_ATT_Signed' -or $BSP_driver -eq 'ProdSigned') {
                 $dstBspDriver = Join-Path $dstPrebuilt 'regrouped_driver'
             }
             if (!(Test-Path $dstBspDriver)) {
@@ -1068,7 +1174,7 @@ switch ($mainSelection) {
                 }
                 
                 # Call the function to modify drivers
-                Modify-PreloadedDrivers -DriversTxtPath $driversTxtPath -ThumbdriveDst $thumbdriveDst -TargetBspDriver $dstBspDriver -RemoveDrivers $selectedConfig.remove_driver -AddDrivers $selectedConfig.add_driver -ProductId $product_id | Out-Null
+                Update-PreloadedDrivers -DriversTxtPath $driversTxtPath -ThumbdriveDst $thumbdriveDst -TargetBspDriver $dstBspDriver -RemoveDrivers $selectedConfig.remove_driver -AddDrivers $selectedConfig.add_driver -ProductId $product_id | Out-Null
             }
         }
 
@@ -1625,7 +1731,7 @@ switch ($mainSelection) {
                 $thumbdriveDst = Join-Path (Join-Path $dstPrebuilt 'ISOGEN/emmcdl_method') 'Thumbdrive'
                 
                 # Call the function to modify drivers
-                Modify-PreloadedDrivers -DriversTxtPath $driversTxtPath -ThumbdriveDst $thumbdriveDst -TargetBspDriver $dstBspDriver -RemoveDrivers $selectedConfig.remove_driver -AddDrivers $selectedConfig.add_driver -ProductId $product_id | Out-Null
+                Update-PreloadedDrivers -DriversTxtPath $driversTxtPath -ThumbdriveDst $thumbdriveDst -TargetBspDriver $dstBspDriver -RemoveDrivers $selectedConfig.remove_driver -AddDrivers $selectedConfig.add_driver -ProductId $product_id | Out-Null
             }
         }
 
@@ -1748,37 +1854,9 @@ switch ($mainSelection) {
         foreach ($drv in $driverCheckList) {
             $catPath = (Join-Path $driverDir $drv.path) -replace '\.inf$', '.cat'
             $label = $drv.label
-            $signResult = "N/A"
-            if (Test-Path $catPath) {
-                try {
-                    # Get driver signature
-                    $sigInfo = Get-AuthenticodeSignature $catPath
-                    if ($sigInfo -and $sigInfo.SignerCertificate) {
-                        $signer = $sigInfo.SignerCertificate.Subject
-                        if ($signer -match 'CN=Microsoft Windows Hardware Compatibility Publisher') {
-                            $signResult = "ATT-signed"
-                        } elseif ($signer -match 'CN=Qualcomm OEM Test Cert 2021 \(TEST ONLY\)') {
-                            $signResult = "Unsigned"
-                        } else {
-                            $signResult = $sigInfo.SignerCertificate.Subject
-                        }
-                    } else {
-                        $signResult = "N/A"
-                    }
-                } catch {
-                    $signResult = "N/A"
-                }
-            }
-            if ($signResult -eq "ATT-signed") {
-                Write-Host -NoNewline ("  {0}: " -f $label)
-                Write-Host $signResult -ForegroundColor Blue
-            } elseif ($signResult -eq "Unsigned") {
-                Write-Host -NoNewline ("  {0}: " -f $label)
-                Write-Host $signResult -ForegroundColor Yellow
-            } else {
-                Write-Host -NoNewline ("  {0}: " -f $label)
-                Write-Host "N/A" -ForegroundColor Red
-            }
+            $signInfo = Get-DriverSignType -FilePath $catPath
+            Write-Host -NoNewline ("  {0}: " -f $label)
+            Write-Host $signInfo.Type -ForegroundColor $signInfo.Color
         }
         Write-Host "Completed!" -ForegroundColor Green
         Write-Host ""
