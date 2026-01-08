@@ -1,6 +1,6 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.42
-$_changedate = 12/19/2025
+$_version = 1.5
+$_changedate = 1/7/2026
 
 
 # User-defined settings
@@ -8,7 +8,7 @@ $thumbdrive = "TEST"
 
 
 # PATH settings
-$BSP_driver = "regrouped_driver_ATT_Signed"
+$BSP_driver = "ProdSigned"
 
 # [Options]
 # regrouped_driver_ATT_Signed
@@ -17,19 +17,15 @@ $BSP_driver = "regrouped_driver_ATT_Signed"
 
 $product = "glymur-wp-1-0_amss_standard_oem"
 $product_id = "8480"
-$enable_debugMode = $false
 $new_driver = "Updated_driver"
 $iso_folder = "ISO"
 $fuse_folder = "FUSE"
 $cva_file = "CVA_info_BSP.txt"
+$enable_debugMode = $false
+$rename_efi = $true
 
 # BSP to ISO mapping
 $bspToIsoMapping = @{
-	'r01900' = '26394'
-	'r02100' = '27842'
-    'r02300' = '27863'
-    'r02500' = '27863'
-    'r02900' = '27871'
     'r03000' = '27902'
 	'r03300' = '27902'
 	'r03500' = '27924'
@@ -51,19 +47,20 @@ $driverConfigs = @(
     @{
         name = "CashmereQ"
         remove_driver = @(
-            "qcSensorsConfig$product_id",
-            "Qccamtelesensor$product_id",
-            "Qccamultrawidesensor$product_id",
-            "qccamultrawidesensor_extension$product_id",
-            "qccamtelesensor_extension$product_id",
-            "qccamrearsensor_extension$product_id",
-            "qccamrearsensor$product_id",
-            "qcAlwaysOnSensing",
-			"qccamjpege_ffu$product_id",
-            "qcdxext_cdps$product_id",
-            "qcdxext_idp$product_id",
-            "qcdxext_idps$product_id",
+            "qcSensorsConfig$product_id"
+            "Qccamtelesensor$product_id"
+            "Qccamultrawidesensor$product_id"
+            "qccamultrawidesensor_extension$product_id"
+            "qccamtelesensor_extension$product_id"
+            "qccamrearsensor_extension$product_id"
+            "qccamrearsensor$product_id"
+            "qcAlwaysOnSensing"
+			"qccamjpege_ffu$product_id"
+            "qcdxext_cdps$product_id"
+            "qcdxext_idp$product_id"
+            "qcdxext_idps$product_id"
             "qcdxext_qcb$product_id"
+			"HalExtQCWdogTimer$product_id"
         )
         add_driver = @(
             "qccamflash_ext$product_id"  # Added to the later of qccamflash$product_id
@@ -72,35 +69,37 @@ $driverConfigs = @(
     @{
         name = "Dolcelatte"
         remove_driver = @(
-            "qcdxext_cdps$product_id",
-            "qcdxext_idp$product_id",
-            "qcdxext_idps$product_id",
+            "qcdxext_cdps$product_id"
+            "qcdxext_idp$product_id"
+            "qcdxext_idps$product_id"
             "qcdxext_qcb$product_id"
+			"HalExtQCWdogTimer$product_id"
         )
         add_driver = @()
     }
 )
 $driverCheckList = @(
-    @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" },
-	@{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio (APO)" },
-	@{ path = "qcadx_ext$product_id/qcadx_ext$product_id.inf"; label = "Audio (SVA)" },
-    @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" },
-    @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" },
-    @{ path = "qccamisp_ext$product_id/qccamisp_ext$product_id.inf"; label = "Camera (ISP)" },
-	@{ path = "CameraComponent/mep_camera_component.inf"; label = "MEP" },
-	@{ path = "Camera_Optin_WOA/MEPOptInCameraExt.inf"; label = "MEP opt-in" },
-	@{ path = "qcSensors$product_id/qcSensors$product_id.inf"; label = "Sensor" },
-    @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" },
-    @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" },
-    @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" },
+    @{ path = "qcdxext_crd$product_id/qcdxext_crd$product_id.inf"; label = "Gfx" }
+	@{ path = "qcasd_apo$product_id/qcasd_apo$product_id.inf"; label = "Audio (APO)" }
+	@{ path = "qcadx_ext$product_id/qcadx_ext$product_id.inf"; label = "Audio (SVA)" }
+    @{ path = "qccamauxsensor_extension$product_id/qccamauxsensor_extension$product_id.inf"; label = "Camera (IR)" }
+    @{ path = "qccamfrontsensor_extension$product_id/qccamfrontsensor_extension$product_id.inf"; label = "Camera (5MP)" }
+    @{ path = "qccamisp_ext$product_id/qccamisp_ext$product_id.inf"; label = "Camera (ISP)" }
+	@{ path = "CameraComponent/mep_camera_component.inf"; label = "MEP" }
+	@{ path = "Camera_Optin_WOA/MEPOptInCameraExt.inf"; label = "MEP opt-in" }
+	@{ path = "qcSensors$product_id/qcSensors$product_id.inf"; label = "Sensor" }
+    @{ path = "qcSensorsConfigCrd$product_id/qcSensorsConfigCrd$product_id.inf"; label = "SensorConfig" }
+    @{ path = "qcsubsys_ext_adsp$product_id/qcsubsys_ext_adsp$product_id.inf"; label = "aDSP" }
+    @{ path = "QcTreeExtOem$product_id/QcTreeExtOem$product_id.inf"; label = "QcTreeExtOem" }
 	@{ path = "QcTreeExtQcom$product_id/QcTreeExtQcom$product_id.inf"; label = "QcTreeExtQcom" }
-	# @{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU (cDSP)" },
-	# @{ path = "QcXhciFilter$product_id/QcXhciFilter$product_id.inf"; label = "xHCI" },
+	# @{ path = "qcnspmcdm$product_id/qcnspmcdm$product_id.inf"; label = "Hexagon NPU (cDSP)" }
+	# @{ path = "QcXhciFilter$product_id/QcXhciFilter$product_id.inf"; label = "xHCI" }
 	# @{ path = "QcUsb4Filter$product_id/QcUsb4Filter$product_id.inf"; label = "USB4" }
-	# @{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "QcSCM" },
-	# @{ path = "qcbluetooth$product_id/qcbluetooth$product_id.inf"; label = "BT" },
-	# @{ path = "qci2c$product_id/qci2c$product_id.inf"; label = "I2C bus" },
+	# @{ path = "qcscm$product_id/qcscm$product_id.inf"; label = "QcSCM" }
+	# @{ path = "qcbluetooth$product_id/qcbluetooth$product_id.inf"; label = "BT" }
+	# @{ path = "qci2c$product_id/qci2c$product_id.inf"; label = "I2C bus" }
 	# @{ path = "qcspi$product_id/qcspi$product_id.inf"; label = "SPI bus" }
+	# @{ path = "qcppx$product_id/qcppx$product_id.inf"; label = "PCIe" }
 )
 
 function Set-DebugModeInTotalUpdate {
@@ -146,6 +145,88 @@ function Set-DebugModeInTotalUpdate {
         $success = $true
     } catch {
         Write-Host "Failed to update debug mode in TotalUpdate.bat: $_" -ForegroundColor Red
+    }
+
+    if ($success -and -not $SkipCompletionMessage -and -not $SuppressMessages) {
+        Write-Host "Completed!" -ForegroundColor Green
+    }
+
+    return $success
+}
+
+function Set-RenameEfiInTotalUpdate {
+    param(
+        [string]$DesktopScriptsPath,
+        [bool]$EnableRename,
+        [switch]$SuppressMessages,
+        [switch]$SkipCompletionMessage
+    )
+
+    if (-not $DesktopScriptsPath) { return $false }
+    $totalUpdatePath = Join-Path $DesktopScriptsPath 'TotalUpdate.bat'
+    if (!(Test-Path $totalUpdatePath)) {
+        if (-not $SuppressMessages) {
+            Write-Host "TotalUpdate.bat not found under $DesktopScriptsPath" -ForegroundColor Yellow
+        }
+        return $false
+    }
+
+    if (-not $SuppressMessages) {
+		Write-Host ""
+        Write-Host "Setting boot EFI in TotalUpdate.bat..." -ForegroundColor Cyan
+    }
+
+    $targetLine = 'move %THUMBDRIVE%:\efi\boot\bootaa64.efi %THUMBDRIVE%:\efi\boot\bootaa64_back.efi'
+    $success = $false
+
+    try {
+        $lines = Get-Content -Path $totalUpdatePath -Encoding Default
+        $modified = $false
+
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            $trimmed = $line.TrimStart()
+            $isCommented = $trimmed.StartsWith('::')
+
+            # Remove leading comment markers and spaces for comparison
+            $core = $trimmed
+            if ($isCommented) {
+                $core = $core.Substring(2).TrimStart()
+            }
+            
+            # Trim both ends for comparison to handle trailing spaces
+            $coreTrimmed = $core.Trim()
+            $targetLineTrimmed = $targetLine.Trim()
+
+            # Match the target line (case-insensitive, ignoring leading/trailing whitespace)
+            if ($coreTrimmed -ieq $targetLineTrimmed) {
+                # Get leading whitespace/indentation from original line
+                $leadingWhitespace = ''
+                if ($line -match '^(\s*)') {
+                    $leadingWhitespace = $matches[1]
+                }
+                
+                if ($EnableRename) {
+                    # Ensure line is uncommented (remove :: and any space after it)
+                    $lines[$i] = $leadingWhitespace + $targetLine
+                } else {
+                    # Ensure line is commented with ::
+                    $lines[$i] = $leadingWhitespace + ':: ' + $targetLine
+                }
+                $modified = $true
+                break
+            }
+        }
+
+        if ($modified) {
+            Set-Content -Path $totalUpdatePath -Value $lines -Encoding Default
+        }
+
+        $success = $true
+    } catch {
+        if (-not $SuppressMessages) {
+            Write-Host "Failed to update boot EFI setting in TotalUpdate.bat: $_" -ForegroundColor Red
+        }
     }
 
     if ($success -and -not $SkipCompletionMessage -and -not $SuppressMessages) {
@@ -671,21 +752,41 @@ switch ($mainSelection) {
         }
 
         if ($debugTargets.Count -gt 0) {
-            $printed = $false
-            $updated = $false
+            # Update debug mode line
+            $printedDebug = $false
+            $updatedDebug = $false
             foreach ($targetPath in $debugTargets) {
                 $params = @{
                     DesktopScriptsPath    = $targetPath
                     EnableDebug           = $enable_debugMode
                     SkipCompletionMessage = $true
                 }
-                if ($printed) { $params.SuppressMessages = $true }
+                if ($printedDebug) { $params.SuppressMessages = $true }
                 if (Set-DebugModeInTotalUpdate @params) {
-                    $updated = $true
-                    if (-not $printed) { $printed = $true }
+                    $updatedDebug = $true
+                    if (-not $printedDebug) { $printedDebug = $true }
                 }
             }
-            if ($updated) {
+            if ($updatedDebug) {
+                Write-Host "Completed!" -ForegroundColor Green
+            }
+
+            # Update boot EFI rename line
+            $printedRename = $false
+            $updatedRename = $false
+            foreach ($targetPath in $debugTargets) {
+                $params = @{
+                    DesktopScriptsPath    = $targetPath
+                    EnableRename          = $rename_efi
+                    SkipCompletionMessage = $true
+                }
+                if ($printedRename) { $params.SuppressMessages = $true }
+                if (Set-RenameEfiInTotalUpdate @params) {
+                    $updatedRename = $true
+                    if (-not $printedRename) { $printedRename = $true }
+                }
+            }
+            if ($updatedRename) {
                 Write-Host "Completed!" -ForegroundColor Green
             }
         }
@@ -1816,10 +1917,10 @@ switch ($mainSelection) {
                 break
             }
         }
-        if (-not $product_id) {
-            Write-Host "Cannot detect product id from driver folder!" -ForegroundColor Red
-            return
-        }
+        # if (-not $product_id) {    # 此段先comment, 因為MEP driver不會有ID
+        #     Write-Host "Cannot detect product id from driver folder!" -ForegroundColor Red
+        #     return
+        # }
 
         foreach ($drv in $driverCheckList) {
             $infPath = Join-Path $driverDir $drv.path
