@@ -1,6 +1,6 @@
 $_creator = "Mike Lu (lu.mike@inventec.com)"
-$_version = 1.5
-$_changedate = 1/7/2026
+$_version = 1.51
+$_changedate = 1/14/2026
 
 
 # User-defined settings
@@ -26,7 +26,7 @@ $rename_efi = $true
 
 # BSP to ISO mapping
 $bspToIsoMapping = @{
-    'r03000' = '27902'
+	'r03000' = '27902'
 	'r03300' = '27902'
 	'r03500' = '27924'
 	'r03500_x2' = '27924'
@@ -40,6 +40,9 @@ $bspToIsoMapping = @{
 	'r04400' = '28000'
 	'r04400_x1' = '28000'
 	'r04500' = '28000'
+	'r04500_x3' = '28000'
+	'Glymur.WP.1.0.c4' = '28000'
+	'Glymur.WP.1.0.c94' = '28000'
 }
 
 # Specific driver settings for Installer
@@ -61,6 +64,9 @@ $driverConfigs = @(
             "qcdxext_idps$product_id"
             "qcdxext_qcb$product_id"
 			"HalExtQCWdogTimer$product_id"
+			"qccamai$product_id"
+			#"qcdiagbridge$product_id"
+			#"qcdiagrouter$product_id"
         )
         add_driver = @(
             "qccamflash_ext$product_id"  # Added to the later of qccamflash$product_id
@@ -74,6 +80,35 @@ $driverConfigs = @(
             "qcdxext_idps$product_id"
             "qcdxext_qcb$product_id"
 			"HalExtQCWdogTimer$product_id"
+			"qccamai$product_id"
+			"qccamauxsensor_extension$product_id"
+			"qccamauxsensor$product_id"
+			"qccamavs$product_id"
+			"qccamavsqrd_ext$product_id"
+			"qccamflash_ext$product_id"
+			"qccamflash$product_id"
+			"qccamfrontsensor_extension$product_id"
+			"qccamfrontsensor$product_id"
+			"qccamisp_ext$product_id"
+			"qccamisp$product_id"
+			"qccamjpege_ext$product_id"
+			"qccamjpege$product_id"
+			"qccamjpege_ffu$product_id"
+			"qccammipicsi_ext$product_id"
+			"qccammipicsi$product_id"
+			"qccamplatform_ext$product_id"
+			"qccamplatform$product_id"
+			"qccamrearsensor_extension$product_id"
+			"qccamrearsensor$product_id"
+			"qccamsecureisp_ext$product_id"
+			"qccamsecureisp$product_id"
+			"qcAlwaysOnSensing"
+			"Qccamtelesensor$product_id"
+			"Qccamultrawidesensor$product_id"
+			"qccamultrawidesensor_extension$product_id"
+			"qccamtelesensor_extension$product_id"
+			#"qcdiagbridge$product_id"
+			#"qcdiagrouter$product_id"
         )
         add_driver = @()
     }
@@ -457,12 +492,18 @@ do {
 switch ($mainSelection) {
     '1' {
         # Download BSP
-        # Get versions from ChipCode
-        $tags = git ls-remote --tags https://chipmaster2.qti.qualcomm.com/home/git/inventec-corp/$product.git |
+        # Get versions from ChipCode (both tags and branches)
+        $tags = git ls-remote --tags --heads https://chipmaster2.qti.qualcomm.com/home/git/inventec-corp/$product.git |
             ForEach-Object {
+                # Match tags: refs/tags/r04400.2^{}
                 if ($_ -match "refs/tags/([^{}]+)\^\{\}") {
                     $tag = $matches[1].Trim()
                     $tag
+                }
+                # Match branches: refs/heads/Glymur.WP.1.0.c4
+                elseif ($_ -match "refs/heads/(.+)") {
+                    $branch = $matches[1].Trim()
+                    $branch
                 }
             }
 
@@ -483,9 +524,9 @@ switch ($mainSelection) {
             }
         } until ($valid)
 
-        $version = $tags[$selection - 1]
-        Write-Host "Selected version: " -NoNewline
-        Write-Host $version -ForegroundColor Cyan
+        $release = $tags[$selection - 1]
+        Write-Host "Selected release: " -NoNewline
+        Write-Host $release -ForegroundColor Cyan
         Write-Host ""
 
         # Config git parameters
@@ -495,9 +536,9 @@ switch ($mainSelection) {
         git config --global core.longpaths true
 
         # Run git clone
-        $targetFolder = "${product}_$version"
-        # git clone -b $version --depth 1 https://qpm-git.qualcomm.com/home2/git/inventec-corp/$product.git ./$targetFolder
-        git clone -b $version --depth 1 https://chipmaster2.qti.qualcomm.com/home/git/inventec-corp/$product.git ./$targetFolder
+        $targetFolder = "${product}_$release"
+        # git clone -b $release --depth 1 https://qpm-git.qualcomm.com/home2/git/inventec-corp/$product.git ./$targetFolder
+        git clone -b $release --depth 1 https://chipmaster2.qti.qualcomm.com/home/git/inventec-corp/$product.git ./$targetFolder
         if ($LASTEXITCODE -eq 0) {
             Write-Host "`nCompleted!" -ForegroundColor Green
         } else {
@@ -1154,7 +1195,7 @@ switch ($mainSelection) {
                     Write-Host "4) DriversForQCB"
                     Write-Host "5) DriversForWinPE"
 					do {
-						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,3)"
+						$catSel = Read-Host "Select driver category number(s) (e.g., 1 or 1,3)"
 						$catSel = $catSel -replace '\\s',''
 						$valid = $catSel -match '^[1-5](,[1-5])*$'
 					} until ($valid)
@@ -1462,9 +1503,12 @@ switch ($mainSelection) {
             }
             # Run WinPEDriverInstall.cmd
             $driverCmds = @(
-                "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'DriverCopy'",
-                "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'WINPE'",
+                "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'DriverCopy'"
+                "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'WINPE'"
                 "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\firmware\BOOTCHAIN -Destination %THUMBDRIVE%\nvmefirmware -Option 'robocopy'"
+				# For BDS menu
+				#"cmd.exe /c copy /y %BSPRoot%\WP\prebuilt\%qcplatform%\firmware\tools.fv %THUMBDRIVE%\nvmefirmware\"
+				"cmd.exe /c ""copy /y %BSPRoot%\WP\prebuilt\%qcplatform%\firmware\tools.fv %THUMBDRIVE%\nvmefirmware\ >nul && echo tools.fv successfully copied"""
             )
             $success = $true
             foreach ($cmd in $driverCmds) {
@@ -1712,7 +1756,7 @@ switch ($mainSelection) {
                     Write-Host "4) DriversForQCB"
                     Write-Host "5) DriversForWinPE"
 					do {
-						$catSel = Read-Host "Select driver category number(s) (e.g. 1 or 1,3)"
+						$catSel = Read-Host "Select driver category number(s) (e.g., 1 or 1,3)"
 						$catSel = $catSel -replace '\\s',''
 						$valid = $catSel -match '^[1-5](,[1-5])*$'
 					} until ($valid)
@@ -1870,9 +1914,13 @@ switch ($mainSelection) {
             }
         }
         $driverCmds = @(
-            "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'DriverCopy'",
-            "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'WINPE'",
+            "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'DriverCopy'"
+            "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\ -Destination %THUMBDRIVE% -Option 'WINPE'"
             "WinPEDriverInstall.cmd -Source %BSPRoot%\WP\prebuilt\%qcplatform%\firmware\BOOTCHAIN -Destination %THUMBDRIVE%\nvmefirmware -Option 'robocopy'"
+			# For BDS menu
+			#"cmd.exe /c copy /y %BSPRoot%\WP\prebuilt\%qcplatform%\firmware\tools.fv %THUMBDRIVE%\nvmefirmware\"
+			"cmd.exe /c ""copy /y %BSPRoot%\WP\prebuilt\%qcplatform%\firmware\tools.fv %THUMBDRIVE%\nvmefirmware\ >nul && echo tools.fv successfully copied"""
+		
         )
         $success = $true
         foreach ($cmd in $driverCmds) {
@@ -2081,10 +2129,31 @@ switch ($mainSelection) {
                 if ([string]::IsNullOrEmpty($ver1)) { $ver1 = '0' }
             }
         } else {
-            Write-Host "Selected folder name does not contain r0xxxx.x pattern" -ForegroundColor Red
+            # If folder name doesn't match tag pattern (e.g., branch name), ask user to input version manually
+            Write-Host "Selected folder name does not contain r0xxxx.x pattern (might be a branch)" -ForegroundColor Yellow
+            Write-Host "Please enter version manually (e.g., r04500.2)" -ForegroundColor Yellow
             Write-Host ""
-            Read-Host "Press Enter to exit..."
-            return
+            do {
+                $manualVersion = Read-Host "Enter version (or press Enter to use default r04500.2)"
+                if ([string]::IsNullOrWhiteSpace($manualVersion)) {
+                    $ver1 = 4500
+                    $ver2 = 2
+                    break
+                }
+                if ($manualVersion -match 'r(\d{5})\.(\d+)') {
+                    $rnum = $matches[1]
+                    $ver2 = $matches[2]
+                    try {
+                        $ver1 = [int]$rnum
+                    } catch {
+                        $ver1 = $rnum.TrimStart('0')
+                        if ([string]::IsNullOrEmpty($ver1)) { $ver1 = '0' }
+                    }
+                    break
+                } else {
+                    Write-Host "Invalid format. Please use r0xxxx.x format (e.g., r04500.2)" -ForegroundColor Red
+                }
+            } while ($true)
         }
 
         # Create Version.cs content
